@@ -1,15 +1,17 @@
-```
-A local music player for Android & Windows with 3 switchable visualizers (bars, waveform, radial), built in Flutter
-```
+# SoundVault 🎵
+> Your music. No cloud. No accounts. Just play.
 
-**Topics to add:**
-```
-flutter android windows music-player visualizer dart
-```
+🎵 SoundVault — a clean, fast local music player built in Flutter.
 
-**About section (right side of repo):**
-```
-🎵 Flutter music player app — store and play local audio files.
-Supports MP3 · FLAC · WAV · AAC · M4A · OGG
-Features: 3 visualizers (bars/wave/radial), shuffle, repeat, queue, auto cover art from iTunes API
-Dark theme — black & lime green, styled after carpinisan-tech.org
+Drag in your files and go. No accounts, no streaming, no nonsense — 
+just your music, beautifully displayed.
+
+→ Supports MP3, FLAC, WAV, AAC, M4A, OGG
+→ 3 switchable visualizers: bar equalizer, waveform, radial
+→ Auto cover art fetched from iTunes API by artist & title
+→ Shuffle, repeat, queue, volume control
+→ Songs / Albums / Artists library views
+→ Dark theme — #0A0A0A black + #4ADE80 lime green
+
+Built with Flutter · just_audio · Provider · SharedPreferences
+Runs on Android & Windows
