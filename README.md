@@ -6,6 +6,7 @@
 <img width="1259" height="708" alt="image" src="https://github.com/user-attachments/assets/f97bc9a4-4428-4b22-a53d-1cd4d751bb47" />
 
 
+
 🎵 SoundVault — a clean, fast local music player built in Flutter.
 
 Drag in your files and go. No accounts, no streaming, no nonsense — 
