@@ -59,8 +59,12 @@ class PlayerService extends ChangeNotifier {
           : 0.0;
 
   PlayerService(this._handler) {
-    _initStreams();
-  }
+  _initStreams();
+  _handler.setSkipCallbacks(
+    onNext: () => skipNext(),
+    onPrev: () => skipPrev(),
+  );
+}
 
   void _initStreams() async {
     final session = await AudioSession.instance;
@@ -97,6 +101,8 @@ class PlayerService extends ChangeNotifier {
       }
     });
   }
+
+
 
   void _tickVisualizer(Duration pos) {
     final t = pos.inMilliseconds / 1000.0;

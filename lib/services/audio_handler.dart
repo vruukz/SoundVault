@@ -1,12 +1,24 @@
 import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/foundation.dart';
 
 /// Bridges just_audio with audio_service for media notifications
 /// and lock screen controls on Android.
 class SoundVaultAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
+
+  VoidCallback? _onSkipNext;
+  VoidCallback? _onSkipPrev;
+
+  void setSkipCallbacks({
+    required VoidCallback onNext,
+    required VoidCallback onPrev,
+  }) {
+    _onSkipNext = onNext;
+    _onSkipPrev = onPrev;
+  }
 
   SoundVaultAudioHandler() {
     _initStreams();
@@ -74,15 +86,14 @@ class SoundVaultAudioHandler extends BaseAudioHandler
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-  Future<void> skipToNext() async {
-    // Handled by PlayerService
-    await super.skipToNext();
-  }
+Future<void> skipToNext() async {
+  _onSkipNext?.call();
+}
 
-  @override
-  Future<void> skipToPrevious() async {
-    await super.skipToPrevious();
-  }
+@override
+Future<void> skipToPrevious() async {
+  _onSkipPrev?.call();
+}
 
   @override
   Future<void> playSong(MediaItem item, String filePath) async {
