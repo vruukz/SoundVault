@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/player_service.dart';
@@ -7,6 +8,20 @@ class MiniPlayer extends StatelessWidget {
   final VoidCallback onTap;
   const MiniPlayer({super.key, required this.onTap});
 
+  bool _isNetworkUrl(String path) =>
+      path.startsWith('http://') || path.startsWith('https://');
+
+  Color _songColor(String id) {
+    final colors = [
+      AppTheme.accentGreen,
+      const Color(0xFF60A5FA),
+      const Color(0xFFF59E0B),
+      const Color(0xFFA78BFA),
+      const Color(0xFFF87171),
+    ];
+    return colors[id.hashCode.abs() % colors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PlayerService>(
@@ -14,6 +29,7 @@ class MiniPlayer extends StatelessWidget {
         final song = service.currentSong;
         if (song == null) return const SizedBox.shrink();
         final color = _songColor(song.id);
+        final art = song.albumArtPath;
 
         return GestureDetector(
           onTap: onTap,
@@ -37,24 +53,23 @@ class MiniPlayer extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    // Mini album art
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: color.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: color.withOpacity(0.3)),
-                      ),
-                      child: Center(
-                        child: Text(
-                          song.title.isNotEmpty ? song.title[0].toUpperCase() : '?',
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                    // Album art
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: art != null
+                            ? _isNetworkUrl(art)
+                                ? Image.network(art,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _fallback(color, song))
+                                : Image.file(File(art),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _fallback(color, song))
+                            : _fallback(color, song),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -93,7 +108,7 @@ class MiniPlayer extends StatelessWidget {
                       child: Container(
                         width: 36,
                         height: 36,
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           color: AppTheme.accentGreen,
                           shape: BoxShape.circle,
                         ),
@@ -106,9 +121,8 @@ class MiniPlayer extends StatelessWidget {
                         ),
                       ),
                     ),
-                    
-                        GestureDetector(
-                          onTap: () => service.skipNext(),
+                    GestureDetector(
+                      onTap: () => service.skipNext(),
                       child: const Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(Icons.skip_next_rounded,
@@ -136,14 +150,18 @@ class MiniPlayer extends StatelessWidget {
     );
   }
 
-  Color _songColor(String id) {
-    final colors = [
-      AppTheme.accentGreen,
-      const Color(0xFF60A5FA),
-      const Color(0xFFF59E0B),
-      const Color(0xFFA78BFA),
-      const Color(0xFFF87171),
-    ];
-    return colors[id.hashCode.abs() % colors.length];
+  Widget _fallback(Color color, dynamic song) {
+    return Container(
+      color: color.withOpacity(0.1),
+      child: Center(
+        child: Text(
+          (song.title as String).isNotEmpty
+              ? (song.title as String)[0].toUpperCase()
+              : '?',
+          style: TextStyle(
+              color: color, fontSize: 16, fontWeight: FontWeight.w900),
+        ),
+      ),
+    );
   }
 }

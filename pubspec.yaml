@@ -7,18 +7,19 @@ environment:
   sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
-  just_audio: ^0.9.40
-  just_audio_windows: ^0.2.0
   flutter:
     sdk: flutter
   provider: ^6.1.2
   shared_preferences: ^2.3.2
   file_picker: ^8.1.2
+  just_audio: ^0.9.40
+  just_audio_windows: ^0.2.0
   audio_session: ^0.1.21
-  on_audio_query: ^2.9.0
   permission_handler: ^11.3.1
   path_provider: ^2.1.4
   path: ^1.9.0
+  audiotags: 1.4.5
+  http: ^1.2.1
 
 dev_dependencies:
   flutter_test:

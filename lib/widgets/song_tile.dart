@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/song.dart';
 import '../theme/app_theme.dart';
@@ -28,6 +29,9 @@ class SongTile extends StatelessWidget {
     return colors[song.id.hashCode.abs() % colors.length];
   }
 
+  bool _isNetworkUrl(String path) =>
+      path.startsWith('http://') || path.startsWith('https://');
+
   @override
   Widget build(BuildContext context) {
     final color = _color();
@@ -50,36 +54,7 @@ class SongTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Album art / playing indicator
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(isPlaying ? 0.15 : 0.08),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                        color: color.withOpacity(isPlaying ? 0.5 : 0.2)),
-                  ),
-                  child: Center(
-                    child: isPlaying
-                        ? _PlayingBars(color: AppTheme.accentGreen)
-                        : Text(
-                            song.title.isNotEmpty
-                                ? song.title[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+            _buildArt(color),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -109,11 +84,48 @@ class SongTile extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               song.durationFormatted,
-              style: const TextStyle(color: AppTheme.textMuted, fontSize: 11),
+              style:
+                  const TextStyle(color: AppTheme.textMuted, fontSize: 11),
             ),
-            const SizedBox(width: 4),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildArt(Color color) {
+    final art = song.albumArtPath;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: 42,
+        height: 42,
+        child: art != null
+            ? _isNetworkUrl(art)
+                ? Image.network(art,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _fallback(color))
+                : Image.file(File(art),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _fallback(color))
+            : _fallback(color),
+      ),
+    );
+  }
+
+  Widget _fallback(Color color) {
+    return Container(
+      color: color.withOpacity(0.1),
+      child: Center(
+        child: isPlaying
+            ? _PlayingBars(color: AppTheme.accentGreen)
+            : Text(
+                song.title.isNotEmpty ? song.title[0].toUpperCase() : '?',
+                style: TextStyle(
+                    color: color,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800),
+              ),
       ),
     );
   }
@@ -154,10 +166,9 @@ class _PlayingBarsState extends State<_PlayingBars>
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: List.generate(3, (i) {
-          final heights = [0.4, 1.0, 0.6];
           final offsets = [0.0, 0.3, 0.6];
           final t = (_controller.value + offsets[i]) % 1.0;
-          final h = (heights[i] * (0.4 + 0.6 * (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0))) * 20;
+          final h = (0.4 + 0.6 * (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0)) * 20;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 1),
             child: Container(

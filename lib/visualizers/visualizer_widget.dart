@@ -17,37 +17,40 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   double _rotation = 0;
-  final Random _random = Random();
   List<double> _smoothed = List.filled(32, 0.0);
+  List<double> _prev = List.filled(32, 0.0);
 
   @override
   void initState() {
     super.initState();
+    // Run at ~60fps for smooth animation
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 16), // ~60fps
-    )..addListener(() {
-        final service = context.read<PlayerService>();
-        if (service.isPlaying) {
-          setState(() {
-            // Smooth the visualizer data
-            final raw = service.visualizerData;
-            for (int i = 0; i < _smoothed.length; i++) {
-              final target = i < raw.length ? raw[i] : 0.0;
-              _smoothed[i] = _smoothed[i] * 0.6 + target * 0.4;
-            }
-            _rotation += 0.005;
-          });
+      duration: const Duration(milliseconds: 16),
+    )..addListener(_onTick)..repeat();
+  }
+
+  void _onTick() {
+    final service = context.read<PlayerService>();
+    final raw = service.visualizerData;
+    final isPlaying = service.isPlaying;
+
+    setState(() {
+      _rotation += isPlaying ? 0.008 : 0.001;
+      for (int i = 0; i < _smoothed.length; i++) {
+        final target = i < raw.length ? raw[i] : 0.0;
+        if (isPlaying) {
+          // Attack fast, decay slow — makes it feel punchy
+          final diff = target - _smoothed[i];
+          _smoothed[i] += diff * (diff > 0 ? 0.5 : 0.15);
         } else {
-          setState(() {
-            // Decay when paused
-            for (int i = 0; i < _smoothed.length; i++) {
-              _smoothed[i] *= 0.92;
-            }
-          });
+          // Gentle decay when paused
+          _smoothed[i] *= 0.88;
         }
-      })
-      ..repeat();
+        _smoothed[i] = _smoothed[i].clamp(0.0, 1.0);
+      }
+      _prev = List.from(_smoothed);
+    });
   }
 
   @override
@@ -62,10 +65,8 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
       builder: (context, service, _) {
         return Column(
           children: [
-            // Mode switcher
             _buildModeSwitcher(service),
             const SizedBox(height: 12),
-            // Visualizer canvas
             SizedBox(
               height: widget.height,
               width: double.infinity,
@@ -115,7 +116,6 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
             mirror: false,
           ),
         );
-
       case VisualizerMode.waveform:
         return CustomPaint(
           painter: WaveformVisualizerPainter(
@@ -123,7 +123,6 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
             color: AppTheme.accentGreen,
           ),
         );
-
       case VisualizerMode.radial:
         return CustomPaint(
           painter: RadialVisualizerPainter(
