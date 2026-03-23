@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
+import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ import 'package:path/path.dart' as p;
 import 'package:audiotags/audiotags.dart';
 import 'package:http/http.dart' as http;
 import '../models/song.dart';
+import 'audio_handler.dart';
 
 enum RepeatMode { none, all, one }
 enum VisualizerMode { bars, waveform, radial }
@@ -19,7 +21,7 @@ class PlayerService extends ChangeNotifier {
   static const _libraryKey = 'soundvault_library';
   static const _watchedFolderKey = 'soundvault_watched_folder';
 
-  final AudioPlayer _player = AudioPlayer();
+  final SoundVaultAudioHandler _handler;
 
   List<Song> _library = [];
   List<Song> _queue = [];
@@ -36,10 +38,8 @@ class PlayerService extends ChangeNotifier {
   String? _watchedFolder;
   String? get watchedFolder => _watchedFolder;
 
-  // Visualizer — driven by position for sync
   List<double> _visualizerData = List.filled(32, 0.0);
   final Random _random = Random();
-  double _vizPhase = 0.0;
 
   List<Song> get library => _library;
   List<Song> get queue => _queue;
@@ -58,65 +58,73 @@ class PlayerService extends ChangeNotifier {
           ? _position.inMilliseconds / _duration.inMilliseconds
           : 0.0;
 
-  PlayerService() {
-    _initPlayer().then((_) {});
+  PlayerService(this._handler) {
+    _initStreams();
   }
 
-  Future<void> _initPlayer() async {
+  void _initStreams() async {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
 
-    _player.positionStream.listen((pos) {
+    _handler.player.positionStream.listen((pos) {
       _position = pos;
       if (_isPlaying) _tickVisualizer(pos);
       notifyListeners();
     });
 
-    _player.durationStream.listen((dur) {
+    _handler.player.durationStream.listen((dur) {
       _duration = dur ?? Duration.zero;
       notifyListeners();
     });
 
-    _player.playingStream.listen((playing) {
+    _handler.player.playingStream.listen((playing) {
       _isPlaying = playing;
       if (!playing) _decayVisualizer();
       notifyListeners();
     });
 
-    _player.processingStateStream.listen((state) {
+    _handler.player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
+        _onTrackComplete();
+      }
+    });
+
+    // Handle lock screen / notification controls
+    _handler.playbackState.listen((state) {
+      if (state.controls.contains(MediaControl.skipToNext) &&
+          state.processingState == AudioProcessingState.completed) {
         _onTrackComplete();
       }
     });
   }
 
-  // Visualizer driven by audio position — much better sync
   void _tickVisualizer(Duration pos) {
     final t = pos.inMilliseconds / 1000.0;
-    _vizPhase = t;
     _visualizerData = List.generate(32, (i) {
-      final freq = (i + 1) * 0.7;
-      final wave1 = sin(t * freq + i * 0.3) * 0.35;
-      final wave2 = sin(t * freq * 1.3 + i * 0.5) * 0.2;
-      final wave3 = sin(t * 2.1 + i * 0.8) * 0.15;
-      final noise = (_random.nextDouble() - 0.5) * 0.25;
-      // Boost bass frequencies
-      final bassBoost = i < 6 ? (0.2 * (6 - i) / 6) : 0.0;
-      final val = 0.35 + wave1 + wave2 + wave3 + noise + bassBoost;
+      final barFreq = 0.5 + (i * 0.18);
+      final w1 = sin(t * barFreq * 2.1) * 0.4;
+      final w2 = sin(t * barFreq * 3.7 + i * 0.4) * 0.25;
+      final w3 = sin(t * barFreq * 5.3 + i * 0.9) * 0.15;
+      final w4 = sin(t * 7.1 + i * 1.3) * 0.1;
+      final beatPhase = (t * 2.0) % 1.0;
+      final beat = beatPhase < 0.08 ? (1.0 - beatPhase / 0.08) * 0.5 : 0.0;
+      final bass = i < 5 ? beat * (1.0 - i / 5.0) * 0.6 : 0.0;
+      final noise = (_random.nextDouble() - 0.5) * 0.15;
+      final val = 0.3 + w1 + w2 + w3 + w4 + beat * 0.3 + bass + noise;
       return val.clamp(0.05, 1.0);
     });
   }
 
   void _decayVisualizer() {
-    _visualizerData = List.generate(32, (i) =>
-        (_visualizerData[i] * 0.3).clamp(0.0, 1.0));
+    _visualizerData = List.generate(
+        32, (i) => (_visualizerData[i] * 0.3).clamp(0.0, 1.0));
   }
 
   void _onTrackComplete() {
     switch (_repeatMode) {
       case RepeatMode.one:
-        _player.seek(Duration.zero);
-        _player.play();
+        _handler.player.seek(Duration.zero);
+        _handler.player.play();
         break;
       case RepeatMode.all:
         skipNext();
@@ -130,6 +138,8 @@ class PlayerService extends ChangeNotifier {
         }
     }
   }
+
+  // ── Library ───────────────────────────────────────────────────────
 
   Future<void> loadLibrary() async {
     final prefs = await SharedPreferences.getInstance();
@@ -155,7 +165,6 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Read metadata from file using audiotags
   Future<Map<String, dynamic>> _readMetadata(String filePath) async {
     final result = <String, dynamic>{
       'title': p.basenameWithoutExtension(filePath),
@@ -164,7 +173,6 @@ class PlayerService extends ChangeNotifier {
       'duration': 0,
       'coverPath': null,
     };
-
     try {
       final tag = await AudioTags.read(filePath);
       if (tag != null) {
@@ -178,23 +186,20 @@ class PlayerService extends ChangeNotifier {
           result['album'] = tag.album!;
         }
         if (tag.duration != null) {
-          result['duration'] = tag.duration! * 1000; // to ms
+          result['duration'] = tag.duration! * 1000;
         }
-
-        // Extract embedded cover art
         if (tag.pictures.isNotEmpty) {
           final pic = tag.pictures.first;
-          if (pic.bytes != null && pic.bytes!.isNotEmpty) {
+          if (pic.bytes.isNotEmpty) {
             final coverPath = await _saveCoverArt(
-                pic.bytes!, p.basenameWithoutExtension(filePath));
+                pic.bytes, p.basenameWithoutExtension(filePath));
             result['coverPath'] = coverPath;
           }
         }
       }
     } catch (e) {
-      debugPrint('Metadata read error for $filePath: $e');
+      debugPrint('Metadata read error: $e');
     }
-
     return result;
   }
 
@@ -207,18 +212,17 @@ class PlayerService extends ChangeNotifier {
       await file.writeAsBytes(bytes);
       return file.path;
     } catch (e) {
-      debugPrint('Cover art save error: $e');
       return null;
     }
   }
 
-  // Fallback: fetch cover from iTunes if no embedded art
   Future<String?> _fetchCoverFromItunes(String title, String artist) async {
     try {
       final query = Uri.encodeComponent('$artist $title');
       final url = Uri.parse(
           'https://itunes.apple.com/search?term=$query&media=music&limit=1');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      final response =
+          await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['resultCount'] > 0) {
@@ -233,19 +237,10 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> addSong(Song song) async {
-    // Check not already in library
     if (_library.any((s) => s.filePath == song.filePath)) return;
-
-    // Read metadata from file
     final meta = await _readMetadata(song.filePath);
     String? coverPath = meta['coverPath'];
-
-    // Fallback to iTunes if no embedded art
-    if (coverPath == null) {
-      coverPath = await _fetchCoverFromItunes(
-          meta['title'], meta['artist']);
-    }
-
+    coverPath ??= await _fetchCoverFromItunes(meta['title'], meta['artist']);
     final enriched = Song(
       id: song.id,
       title: meta['title'],
@@ -255,7 +250,6 @@ class PlayerService extends ChangeNotifier {
       duration: meta['duration'],
       albumArtPath: coverPath,
     );
-
     _library.add(enriched);
     await _saveLibrary();
     notifyListeners();
@@ -263,7 +257,7 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> removeSong(String id) async {
     if (_currentSong?.id == id) {
-      await _player.stop();
+      await _handler.stop();
       _currentSong = null;
       _currentIndex = -1;
     }
@@ -283,7 +277,7 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Folder watching ──────────────────────────────────────────────
+  // ── Folder watching ───────────────────────────────────────────────
 
   Future<void> setWatchedFolder(String folderPath) async {
     _watchedFolder = folderPath;
@@ -296,19 +290,15 @@ class PlayerService extends ChangeNotifier {
     if (_watchedFolder == null) return;
     final dir = Directory(_watchedFolder!);
     if (!await dir.exists()) return;
-
     const extensions = ['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg'];
     final files = await dir
         .list(recursive: true)
         .where((e) =>
             e is File &&
-            extensions.any((ext) =>
-                e.path.toLowerCase().endsWith(ext)))
+            extensions.any((ext) => e.path.toLowerCase().endsWith(ext)))
         .cast<File>()
         .toList();
 
-    // Add new files not already in library
-    int added = 0;
     for (final file in files) {
       if (!_library.any((s) => s.filePath == file.path)) {
         final song = Song(
@@ -320,11 +310,9 @@ class PlayerService extends ChangeNotifier {
           duration: 0,
         );
         await addSong(song);
-        added++;
       }
     }
 
-    // Remove songs whose files no longer exist
     final toRemove = _library
         .where((s) =>
             s.filePath.startsWith(_watchedFolder!) &&
@@ -334,8 +322,6 @@ class PlayerService extends ChangeNotifier {
     for (final id in toRemove) {
       await removeSong(id);
     }
-
-    debugPrint('Folder scan: $added added, ${toRemove.length} removed');
     notifyListeners();
   }
 
@@ -349,9 +335,25 @@ class PlayerService extends ChangeNotifier {
       _currentIndex = 0;
     }
     _currentSong = song;
+
+    // Build MediaItem for notification / lock screen
+    final artUri = song.albumArtPath != null
+        ? (song.albumArtPath!.startsWith('http')
+            ? Uri.parse(song.albumArtPath!)
+            : Uri.file(song.albumArtPath!))
+        : null;
+
+    final mediaItem = MediaItem(
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      album: song.album,
+      duration: Duration(milliseconds: song.duration),
+      artUri: artUri,
+    );
+
     try {
-      await _player.setFilePath(song.filePath);
-      await _player.play();
+      await _handler.playSong(mediaItem, song.filePath);
     } catch (e) {
       debugPrint('Error playing: $e');
     }
@@ -360,9 +362,9 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> togglePlay() async {
     if (_isPlaying) {
-      await _player.pause();
+      await _handler.pause();
     } else {
-      await _player.play();
+      await _handler.play();
     }
   }
 
@@ -379,20 +381,21 @@ class PlayerService extends ChangeNotifier {
   Future<void> skipPrev() async {
     if (_queue.isEmpty) return;
     if (_position.inSeconds > 3) {
-      await _player.seek(Duration.zero);
+      await _handler.seek(Duration.zero);
       return;
     }
     if (_isShuffle) {
       _currentIndex = _random.nextInt(_queue.length);
     } else {
-      _currentIndex = (_currentIndex - 1 + _queue.length) % _queue.length;
+      _currentIndex =
+          (_currentIndex - 1 + _queue.length) % _queue.length;
     }
     await playSong(_queue[_currentIndex], queue: _queue);
   }
 
   Future<void> seekTo(double progress) async {
     final ms = (_duration.inMilliseconds * progress).round();
-    await _player.seek(Duration(milliseconds: ms));
+    await _handler.seek(Duration(milliseconds: ms));
   }
 
   void toggleShuffle() {
@@ -401,8 +404,8 @@ class PlayerService extends ChangeNotifier {
   }
 
   void toggleRepeat() {
-    _repeatMode =
-        RepeatMode.values[(_repeatMode.index + 1) % RepeatMode.values.length];
+    _repeatMode = RepeatMode
+        .values[(_repeatMode.index + 1) % RepeatMode.values.length];
     notifyListeners();
   }
 
@@ -413,13 +416,7 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> setVolume(double v) async {
     _volume = v;
-    await _player.setVolume(v);
+    await _handler.player.setVolume(v);
     notifyListeners();
-  }
-
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
   }
 }
