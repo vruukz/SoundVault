@@ -17,7 +17,7 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   double _rotation = 0;
-  List<double> _smoothed = List.filled(32, 0.0);
+  final List<double> _smoothed = List.filled(32, 0.0);
   List<double> _prev = List.filled(32, 0.0);
 
   @override

@@ -38,10 +38,10 @@ class AppTheme {
         ),
       ),
       dividerTheme: const DividerThemeData(color: borderColor),
-      sliderTheme: SliderThemeData(
+      sliderTheme: const SliderThemeData(
         trackHeight: 3,
-        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+        thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: RoundSliderOverlayShape(overlayRadius: 14),
         thumbColor: accentGreen,
         activeTrackColor: accentGreen,
         inactiveTrackColor: borderColor,

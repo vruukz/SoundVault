@@ -24,13 +24,15 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearching = false;
   bool _isScanning = false;
 
+  // For swipe left/right on library
+  double _dragStartX = 0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final service = context.read<PlayerService>();
       service.loadLibrary().then((_) {
-        // Auto-scan watched folder on launch
         if (service.watchedFolder != null) {
           service.scanWatchedFolder();
         }
@@ -51,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
       allowMultiple: true,
     );
     if (result == null) return;
-
+    if (!mounted) return;
     final service = context.read<PlayerService>();
     int added = 0;
     for (final file in result.files) {
@@ -67,7 +69,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await service.addSong(song);
       added++;
     }
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -86,12 +87,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _pickWatchedFolder() async {
     final result = await FilePicker.platform.getDirectoryPath();
     if (result == null) return;
-
+    if (!mounted) return;
     final service = context.read<PlayerService>();
     setState(() => _isScanning = true);
     await service.setWatchedFolder(result);
     setState(() => _isScanning = false);
-
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -115,6 +115,121 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isScanning = false);
   }
 
+  void _showLibrarySettings(BuildContext context) {
+    final service = context.read<PlayerService>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: AppTheme.borderColor),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'LIBRARY SETTINGS',
+                style: TextStyle(
+                  color: AppTheme.accentGreen,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (service.watchedFolder != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.folder_rounded,
+                          color: AppTheme.accentGreen, size: 16),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          service.watchedFolder!,
+                          style: const TextStyle(
+                              color: AppTheme.textMuted, fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (service.watchedFolder != null)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: _isScanning
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.accentGreen),
+                        )
+                      : const Icon(Icons.refresh_rounded,
+                          color: AppTheme.accentGreen),
+                  title: const Text('Rescan folder',
+                      style: TextStyle(color: AppTheme.textSecondary)),
+                  onTap: _isScanning
+                      ? null
+                      : () async {
+                          Navigator.pop(ctx);
+                          await _rescanFolder();
+                        },
+                ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.folder_open_rounded,
+                    color: AppTheme.textSecondary),
+                title: Text(
+                  service.watchedFolder != null
+                      ? 'Change watched folder'
+                      : 'Set watched folder',
+                  style: const TextStyle(color: AppTheme.textSecondary),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _pickWatchedFolder();
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.audio_file_outlined,
+                    color: AppTheme.textSecondary),
+                title: const Text('Add individual files',
+                    style: TextStyle(color: AppTheme.textSecondary)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  await _addFiles();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openPlayer(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const PlayerScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PlayerService>(
@@ -126,63 +241,47 @@ class _HomeScreenState extends State<HomeScreen> {
                 s.artist.toLowerCase().contains(_search.toLowerCase()))
             .toList();
 
-        return Scaffold(
-          backgroundColor: AppTheme.bgColor,
-          body: Column(
-            children: [
-              Expanded(
-                child: CustomScrollView(
-                  slivers: [
-                    _buildAppBar(service),
-                    if (service.watchedFolder != null)
-                      _buildFolderBanner(service),
-                    _buildTabBar(),
-                    if (_tab == 0) _buildSongList(songs, service),
-                    if (_tab == 1) _buildAlbumGrid(service),
-                    if (_tab == 2) _buildArtistList(service),
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
-                ),
-              ),
-              if (service.currentSong != null)
-                MiniPlayer(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PlayerScreen()),
+        return GestureDetector(
+          onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
+          onHorizontalDragEnd: (d) {
+            final dx = d.globalPosition.dx - _dragStartX;
+            if (dx < -60) {
+              // swipe left = next tab
+              setState(() => _tab = (_tab + 1).clamp(0, 2));
+            } else if (dx > 60) {
+              // swipe right = prev tab
+              setState(() => _tab = (_tab - 1).clamp(0, 2));
+            }
+          },
+          child: Scaffold(
+            backgroundColor: AppTheme.bgColor,
+            body: Column(
+              children: [
+                Expanded(
+                  child: CustomScrollView(
+                    slivers: [
+                      _buildAppBar(service),
+                      _buildTabBar(),
+                      if (_tab == 0) _buildSongList(songs, service),
+                      if (_tab == 1) _buildAlbumGrid(service),
+                      if (_tab == 2) _buildArtistList(service),
+                      const SliverToBoxAdapter(child: SizedBox(height: 100)),
+                    ],
                   ),
                 ),
-            ],
-          ),
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Folder watch button
-              FloatingActionButton.small(
-                heroTag: 'folder',
-                backgroundColor: AppTheme.cardColor,
-                foregroundColor: AppTheme.accentGreen,
-                onPressed: _isScanning ? null : _pickWatchedFolder,
-                child: _isScanning
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppTheme.accentGreen,
-                        ),
-                      )
-                    : const Icon(Icons.folder_open_rounded),
-              ),
-              const SizedBox(height: 8),
-              // Add files button
-              FloatingActionButton(
-                heroTag: 'add',
-                backgroundColor: AppTheme.accentGreen,
-                foregroundColor: AppTheme.bgColor,
-                onPressed: _addFiles,
-                child: const Icon(Icons.add_rounded),
-              ),
-            ],
+                if (service.currentSong != null)
+                  GestureDetector(
+                    onVerticalDragEnd: (d) {
+                      // Swipe up on mini player = open player screen
+                      if (d.primaryVelocity != null &&
+                          d.primaryVelocity! < -200) {
+                        _openPlayer(context);
+                      }
+                    },
+                    child: MiniPlayer(onTap: () => _openPlayer(context)),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -206,30 +305,14 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               onChanged: (v) => setState(() => _search = v),
             )
-          : Row(
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.accentGreen),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text('SV',
-                      style: TextStyle(
-                          color: AppTheme.accentGreen,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 14,
-                          letterSpacing: 2)),
-                ),
-                const SizedBox(width: 10),
-                const Text('SoundVault',
-                    style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                        letterSpacing: -0.5)),
-              ],
+          : const Text(
+              'SoundVault',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                letterSpacing: -0.5,
+              ),
             ),
       actions: [
         IconButton(
@@ -256,62 +339,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  SliverToBoxAdapter _buildFolderBanner(PlayerService service) {
-    return SliverToBoxAdapter(
-      child: GestureDetector(
-        onTap: _isScanning ? null : _rescanFolder,
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppTheme.accentGreen.withOpacity(0.06),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.accentGreen.withOpacity(0.25)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.folder_rounded,
-                  color: AppTheme.accentGreen, size: 16),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'WATCHED FOLDER',
-                      style: TextStyle(
-                        color: AppTheme.accentGreen,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    Text(
-                      service.watchedFolder!,
-                      style: const TextStyle(
-                          color: AppTheme.textMuted, fontSize: 11),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              _isScanning
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: AppTheme.accentGreen),
-                    )
-                  : const Icon(Icons.refresh_rounded,
-                      color: AppTheme.accentGreen, size: 16),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   SliverToBoxAdapter _buildTabBar() {
     return SliverToBoxAdapter(
       child: Padding(
@@ -332,6 +359,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: 'ARTISTS',
                 selected: _tab == 2,
                 onTap: () => setState(() => _tab = 2)),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => _showLibrarySettings(context),
+              child: Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: AppTheme.cardColor,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: const Icon(Icons.settings_rounded,
+                    color: AppTheme.textMuted, size: 16),
+              ),
+            ),
           ],
         ),
       ),
@@ -349,12 +390,60 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 48, color: AppTheme.textMuted),
               const SizedBox(height: 16),
               const Text('No songs yet',
-                  style:
-                      TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 16)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: _pickWatchedFolder,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                        color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.folder_open_rounded,
+                          color: AppTheme.accentGreen, size: 16),
+                      SizedBox(width: 8),
+                      Text('Pick a folder',
+                          style: TextStyle(
+                              color: AppTheme.accentGreen,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 8),
-              const Text('Tap + to add files or 📁 to watch a folder',
-                  style:
-                      TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+              GestureDetector(
+                onTap: _addFiles,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_rounded,
+                          color: AppTheme.textSecondary, size: 16),
+                      SizedBox(width: 8),
+                      Text('Add individual files',
+                          style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -378,8 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   MaterialPageRoute(builder: (_) => const PlayerScreen()),
                 );
               },
-              onLongPress: () =>
-                  _showSongMenu(context, songs[i], service),
+              onLongPress: () => _showSongMenu(context, songs[i], service),
             ),
           ),
           childCount: songs.length,
@@ -427,7 +515,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Album art or icon
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: coverSong.albumArtPath != null
@@ -478,9 +565,9 @@ class _HomeScreenState extends State<HomeScreen> {
       width: 56,
       height: 56,
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Icon(Icons.album_rounded, color: color, size: 28),
     );
@@ -504,8 +591,7 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: GestureDetector(
                 onTap: () {
-                  service.playSong(entry.value.first,
-                      queue: entry.value);
+                  service.playSong(entry.value.first, queue: entry.value);
                   Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -524,10 +610,10 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
+                          color: color.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
-                          border:
-                              Border.all(color: color.withOpacity(0.3)),
+                          border: Border.all(
+                              color: color.withValues(alpha: 0.3)),
                         ),
                         child: Center(
                           child: Text(
@@ -572,8 +658,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showSongMenu(
-      BuildContext context, Song song, PlayerService service) {
+  void _showSongMenu(BuildContext context, Song song, PlayerService service) {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.cardColor,
@@ -648,8 +733,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     backgroundColor: AppTheme.cardColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side:
-                          const BorderSide(color: AppTheme.borderColor),
+                      side: const BorderSide(color: AppTheme.borderColor),
                     ),
                     title: const Text('Song Info',
                         style: TextStyle(color: AppTheme.textPrimary)),
@@ -661,16 +745,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         _infoRow('Artist', song.artist),
                         _infoRow('Album', song.album),
                         _infoRow('Duration', song.durationFormatted),
-                        _infoRow('File',
-                            song.filePath.split(r'\').last),
+                        _infoRow('File', song.filePath.split(r'\').last),
                       ],
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         child: const Text('OK',
-                            style: TextStyle(
-                                color: AppTheme.accentGreen)),
+                            style: TextStyle(color: AppTheme.accentGreen)),
                       ),
                     ],
                   ),
@@ -745,23 +827,20 @@ class _Tab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
           color: selected
-              ? AppTheme.accentGreen.withOpacity(0.12)
+              ? AppTheme.accentGreen.withValues(alpha: 0.12)
               : AppTheme.cardColor,
           borderRadius: BorderRadius.circular(4),
           border: Border.all(
-            color:
-                selected ? AppTheme.accentGreen : AppTheme.borderColor,
+            color: selected ? AppTheme.accentGreen : AppTheme.borderColor,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color:
-                selected ? AppTheme.accentGreen : AppTheme.textMuted,
+            color: selected ? AppTheme.accentGreen : AppTheme.textMuted,
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
