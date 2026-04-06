@@ -17,7 +17,6 @@ class VisualizerWidget extends StatefulWidget {
 class _VisualizerWidgetState extends State<VisualizerWidget>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
-  // FIX: made _smoothed final (it's never reassigned, only mutated in-place)
   final List<double> _smoothed = List.filled(32, 0.0);
   double _rotation = 0;
 
@@ -30,21 +29,29 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
   void _onTick(Duration elapsed) {
     final service = context.read<PlayerService>();
     final isPlaying = service.isPlaying;
+    final isWaveform = service.visualizerMode == VisualizerMode.waveform;
 
     Float32List raw;
-    if (service.visualizerMode == VisualizerMode.waveform) {
-      raw = service.waveData;
+    if (isWaveform) {
+      raw = service.waveData; // signed [-1, 1]
     } else {
-      raw = service.fftData;
+      raw = service.fftData;  // unsigned [0, 1]
     }
 
-    final binSize = raw.length ~/ 32;
+    final binSize = (raw.length / 32).floor().clamp(1, raw.length);
+
     final downsampled = List.generate(32, (i) {
       double sum = 0;
-      for (int j = i * binSize; j < (i + 1) * binSize && j < raw.length; j++) {
-        sum += raw[j].abs();
+      final start = i * binSize;
+      final end = ((i + 1) * binSize).clamp(0, raw.length);
+      for (int j = start; j < end; j++) {
+        // FIX: for waveform keep signed value (don't abs), for FFT abs is fine
+        sum += isWaveform ? raw[j] : raw[j].abs();
       }
-      return (sum / binSize).clamp(0.0, 1.0);
+      final count = end - start;
+      final avg = count > 0 ? sum / count : 0.0;
+      // FIX: waveform stays signed [-1,1], FFT clamped [0,1]
+      return isWaveform ? avg.clamp(-1.0, 1.0) : avg.clamp(0.0, 1.0);
     });
 
     setState(() {
@@ -55,9 +62,12 @@ class _VisualizerWidgetState extends State<VisualizerWidget>
           final diff = target - _smoothed[i];
           _smoothed[i] += diff * (diff > 0 ? 0.6 : 0.12);
         } else {
+          // Decay toward 0 (works for both signed and unsigned)
           _smoothed[i] *= 0.85;
         }
-        _smoothed[i] = _smoothed[i].clamp(0.0, 1.0);
+        _smoothed[i] = isWaveform
+            ? _smoothed[i].clamp(-1.0, 1.0)
+            : _smoothed[i].clamp(0.0, 1.0);
       }
     });
   }

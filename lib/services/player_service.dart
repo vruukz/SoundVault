@@ -34,7 +34,9 @@ class PlayerService extends ChangeNotifier {
   double _volume = 0.8;
   String? _watchedFolder;
 
-  // FFT data
+  // FIX: generation counter to cancel stale poll loops on skip/new song
+  int _playGeneration = 0;
+
   AudioData? _audioData;
 
   List<Song> get library => _library;
@@ -55,25 +57,32 @@ class PlayerService extends ChangeNotifier {
           ? _position.inMilliseconds / _duration.inMilliseconds
           : 0.0;
 
-  // Returns real FFT data (first 256 values) or wave (next 256)
   Float32List get fftData {
     if (_audioData == null) return Float32List(256);
     try {
       _audioData!.updateSamples();
       final samples = _audioData!.getAudioData();
       if (samples.length >= 256) {
-        return samples.sublist(0, 256);
+        return Float32List.fromList(samples.sublist(0, 256));
       }
     } catch (_) {}
     return Float32List(256);
   }
 
+  // FIX: waveform uses FFT data mapped to [-1, 1] so the wave painter
+  // sees proper positive/negative swing instead of flat/broken output
   Float32List get waveData {
     if (_audioData == null) return Float32List(256);
     try {
+      _audioData!.updateSamples();
       final samples = _audioData!.getAudioData();
-      if (samples.length >= 512) {
-        return samples.sublist(256, 512);
+      if (samples.isNotEmpty) {
+        final len = samples.length.clamp(0, 256);
+        final out = Float32List(256);
+        for (int i = 0; i < len; i++) {
+          out[i] = (samples[i] * 2.0 - 1.0).clamp(-1.0, 1.0);
+        }
+        return out;
       }
     } catch (_) {}
     return Float32List(256);
@@ -134,12 +143,12 @@ class PlayerService extends ChangeNotifier {
         if (tag.title != null && tag.title!.isNotEmpty) result['title'] = tag.title!;
         if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) result['artist'] = tag.trackArtist!;
         if (tag.album != null && tag.album!.isNotEmpty) result['album'] = tag.album!;
-        // FIX: removed unnecessary null check and ! on tag.duration (non-nullable int)
         result['duration'] = (tag.duration ?? 0) * 1000;
         if (tag.pictures.isNotEmpty) {
           final pic = tag.pictures.first;
           if (pic.bytes != null && pic.bytes!.isNotEmpty) {
-            final coverPath = await _saveCoverArt(pic.bytes!, p.basenameWithoutExtension(filePath));
+            final coverPath = await _saveCoverArt(
+                pic.bytes!, p.basenameWithoutExtension(filePath));
             result['coverPath'] = coverPath;
           }
         }
@@ -166,8 +175,10 @@ class PlayerService extends ChangeNotifier {
   Future<String?> _fetchCoverFromItunes(String title, String artist) async {
     try {
       final query = Uri.encodeComponent('$artist $title');
-      final url = Uri.parse('https://itunes.apple.com/search?term=$query&media=music&limit=1');
-      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      final url = Uri.parse(
+          'https://itunes.apple.com/search?term=$query&media=music&limit=1');
+      final response =
+          await http.get(url).timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['resultCount'] > 0) {
@@ -182,7 +193,6 @@ class PlayerService extends ChangeNotifier {
   Future<void> addSong(Song song) async {
     if (_library.any((s) => s.filePath == song.filePath)) return;
     final meta = await _readMetadata(song.filePath);
-    // FIX: use ??= instead of if (x == null) x = ...
     String? coverPath = meta['coverPath'];
     coverPath ??= await _fetchCoverFromItunes(meta['title'], meta['artist']);
     final enriched = Song(
@@ -212,7 +222,10 @@ class PlayerService extends ChangeNotifier {
   }
 
   void playNext(Song song) {
-    if (_queue.isEmpty) { _queue = [song]; return; }
+    if (_queue.isEmpty) {
+      _queue = [song];
+      return;
+    }
     final insertAt = (_currentIndex + 1).clamp(0, _queue.length);
     _queue.insert(insertAt, song);
     notifyListeners();
@@ -234,7 +247,9 @@ class PlayerService extends ChangeNotifier {
     const extensions = ['.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg'];
     final files = await dir
         .list(recursive: true)
-        .where((e) => e is File && extensions.any((ext) => e.path.toLowerCase().endsWith(ext)))
+        .where((e) =>
+            e is File &&
+            extensions.any((ext) => e.path.toLowerCase().endsWith(ext)))
         .cast<File>()
         .toList();
 
@@ -253,10 +268,11 @@ class PlayerService extends ChangeNotifier {
     }
 
     final toRemove = _library
-        .where((s) => s.filePath.startsWith(_watchedFolder!) && !files.any((f) => f.path == s.filePath))
+        .where((s) =>
+            s.filePath.startsWith(_watchedFolder!) &&
+            !files.any((f) => f.path == s.filePath))
         .map((s) => s.id)
         .toList();
-    // FIX: added curly braces around for-loop body
     for (final id in toRemove) {
       await removeSong(id);
     }
@@ -297,27 +313,32 @@ class PlayerService extends ChangeNotifier {
       _source = await _soloud.loadFile(song.filePath);
       _handle = await _soloud.play(_source!, volume: _volume);
 
-      // Poll position
-      _pollPosition();
-
+      // FIX: set _isPlaying = true BEFORE starting the poll loop.
+      // Previously it was set after _pollPosition(), so the while loop
+      // would see _isPlaying == false and exit immediately on first play.
       _isPlaying = true;
+      notifyListeners();
+
+      // Each play gets a unique generation; stale loops check and bail.
+      final generation = ++_playGeneration;
+      _pollPosition(generation);
     } catch (e) {
       debugPrint('Play error: $e');
+      _isPlaying = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
-  void _pollPosition() async {
-    while (_handle != null && _isPlaying) {
+  void _pollPosition(int generation) async {
+    while (_handle != null && _isPlaying && generation == _playGeneration) {
       await Future.delayed(const Duration(milliseconds: 200));
-      if (_handle == null) break;
+      if (_handle == null || generation != _playGeneration) break;
       try {
         final pos = _soloud.getPosition(_handle!);
         final len = _soloud.getLength(_source!);
         _position = pos;
         _duration = len;
 
-        // Check completion
         if (!_soloud.getIsValidVoiceHandle(_handle!)) {
           _onTrackComplete();
           break;
@@ -353,12 +374,14 @@ class PlayerService extends ChangeNotifier {
       if (_isPlaying) {
         _soloud.setPause(_handle!, true);
         _isPlaying = false;
+        notifyListeners();
       } else {
         _soloud.setPause(_handle!, false);
         _isPlaying = true;
-        _pollPosition();
+        notifyListeners();
+        // Resume polling with current generation
+        _pollPosition(_playGeneration);
       }
-      notifyListeners();
     } catch (e) {
       debugPrint('togglePlay error: $e');
     }
@@ -392,7 +415,8 @@ class PlayerService extends ChangeNotifier {
     if (_handle == null || _source == null) return;
     try {
       final len = _soloud.getLength(_source!);
-      final target = Duration(milliseconds: (len.inMilliseconds * progress).round());
+      final target = Duration(
+          milliseconds: (len.inMilliseconds * progress).round());
       _soloud.seek(_handle!, target);
       _position = target;
       notifyListeners();
@@ -407,7 +431,8 @@ class PlayerService extends ChangeNotifier {
   }
 
   void toggleRepeat() {
-    _repeatMode = RepeatMode.values[(_repeatMode.index + 1) % RepeatMode.values.length];
+    _repeatMode =
+        RepeatMode.values[(_repeatMode.index + 1) % RepeatMode.values.length];
     notifyListeners();
   }
 

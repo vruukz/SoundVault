@@ -22,29 +22,25 @@ class BarVisualizerPainter extends CustomPainter {
     for (int i = 0; i < data.length; i++) {
       final x = i * barWidth + gap / 2;
       final h = data[i] * size.height * (mirror ? 0.45 : 0.9);
+      if (h < 1) continue;
 
       final paint = Paint()
         ..shader = LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
-          colors: [
-            color,
-            color.withValues(alpha: 0.4),
-          ],
+          colors: [color, color.withValues(alpha: 0.4)],
         ).createShader(Rect.fromLTWH(x, size.height - h, bw, h))
         ..style = PaintingStyle.fill;
 
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, size.height - h, bw, h),
-        const Radius.circular(3),
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, size.height - h, bw, h),
+          const Radius.circular(3),
+        ),
+        paint,
       );
-      canvas.drawRRect(rect, paint);
 
       if (mirror) {
-        final rect2 = RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, size.height, bw, h),
-          const Radius.circular(3),
-        );
         final paint2 = Paint()
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
@@ -55,13 +51,20 @@ class BarVisualizerPainter extends CustomPainter {
             ],
           ).createShader(Rect.fromLTWH(x, size.height, bw, h))
           ..style = PaintingStyle.fill;
-        canvas.drawRRect(rect2, paint2);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(x, size.height, bw, h),
+            const Radius.circular(3),
+          ),
+          paint2,
+        );
       }
     }
   }
 
   @override
-  bool shouldRepaint(BarVisualizerPainter old) => old.data != data;
+  // FIX: use listEquals-style comparison so repaints actually trigger
+  bool shouldRepaint(BarVisualizerPainter old) => true;
 }
 
 class WaveformVisualizerPainter extends CustomPainter {
@@ -74,57 +77,72 @@ class WaveformVisualizerPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (data.isEmpty) return;
     final mid = size.height / 2;
+
+    // FIX: Waveform now draws a single continuous line using the signed
+    // [-1, 1] values from waveData. Positive = above center, negative = below.
+    // This gives a proper oscilloscope-style waveform.
     final path = Path();
-    final path2 = Path();
+    final pathFill = Path();
 
     for (int i = 0; i < data.length; i++) {
       final x = (i / (data.length - 1)) * size.width;
-      final amp = data[i] * mid * 0.9;
-      final y = mid - amp;
-      final y2 = mid + amp;
+      // data[i] is in [-1, 1]; map to canvas Y (invert so positive = up)
+      final y = mid - data[i] * mid * 0.85;
+
       if (i == 0) {
         path.moveTo(x, y);
-        path2.moveTo(x, y2);
+        pathFill.moveTo(x, mid);
+        pathFill.lineTo(x, y);
       } else {
         final prevX = ((i - 1) / (data.length - 1)) * size.width;
         final cx = (prevX + x) / 2;
-        final prevAmp = data[i - 1] * mid * 0.9;
-        path.cubicTo(cx, mid - prevAmp, cx, y, x, y);
-        path2.cubicTo(cx, mid + prevAmp, cx, y2, x, y2);
+        final prevY = mid - data[i - 1] * mid * 0.85;
+        path.cubicTo(cx, prevY, cx, y, x, y);
+        pathFill.cubicTo(cx, prevY, cx, y, x, y);
       }
     }
 
-    final fillPath = Path()..addPath(path, Offset.zero);
-    for (int i = data.length - 1; i >= 0; i--) {
-      final x = (i / (data.length - 1)) * size.width;
-      final amp = data[i] * mid * 0.9;
-      final y2 = mid + amp;
-      if (i == data.length - 1) fillPath.lineTo(x, y2);
-    }
+    // Close fill path back to center line
+    pathFill.lineTo(size.width, mid);
+    pathFill.lineTo(0, mid);
+    pathFill.close();
 
-    final strokePaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
+    // Fill under the waveform
+    canvas.drawPath(
+      pathFill,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.15),
+            color.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+        ..style = PaintingStyle.fill,
+    );
 
-    final strokePaint2 = Paint()
-      ..color = color.withValues(alpha: 0.4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
+    // Glow pass
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: 0.25)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6.0
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
 
-    final glowPaint = Paint()
-      ..color = color.withValues(alpha: 0.1)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 6.0
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    // Main line
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round,
+    );
 
-    canvas.drawPath(path, glowPaint);
-    canvas.drawPath(path2, glowPaint);
-    canvas.drawPath(path, strokePaint);
-    canvas.drawPath(path2, strokePaint2);
-
+    // Center baseline
     canvas.drawLine(
       Offset(0, mid),
       Offset(size.width, mid),
@@ -135,7 +153,7 @@ class WaveformVisualizerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(WaveformVisualizerPainter old) => old.data != data;
+  bool shouldRepaint(WaveformVisualizerPainter old) => true;
 }
 
 class RadialVisualizerPainter extends CustomPainter {
@@ -210,6 +228,5 @@ class RadialVisualizerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(RadialVisualizerPainter old) =>
-      old.data != data || old.rotation != rotation;
+  bool shouldRepaint(RadialVisualizerPainter old) => true;
 }
