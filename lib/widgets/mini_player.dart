@@ -42,7 +42,7 @@ class MiniPlayer extends StatelessWidget {
               border: Border.all(color: AppTheme.borderColor),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.4),
+                  color: Colors.black.withValues(alpha: 0.4),
                   blurRadius: 16,
                   offset: const Offset(0, 4),
                 ),
@@ -53,7 +53,6 @@ class MiniPlayer extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    // Album art
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: SizedBox(
@@ -152,7 +151,7 @@ class MiniPlayer extends StatelessWidget {
 
   Widget _fallback(Color color, dynamic song) {
     return Container(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       child: Center(
         child: Text(
           (song.title as String).isNotEmpty

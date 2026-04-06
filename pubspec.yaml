@@ -1,5 +1,5 @@
 name: sound_vault
-description: SoundVault — A local music player with visualizer.
+description: SoundVault — A local music player with real FFT visualizer.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -12,15 +12,14 @@ dependencies:
   provider: ^6.1.2
   shared_preferences: ^2.3.2
   file_picker: ^8.1.2
-  just_audio: ^0.9.40
-  just_audio_windows: ^0.2.0
-  audio_session: ^0.1.21
+  flutter_soloud: ^3.5.0
   audio_service: ^0.18.15
   permission_handler: ^11.3.1
   path_provider: ^2.1.4
   path: ^1.9.0
   audiotags: 1.4.5
   http: ^1.2.1
+  just_audio: ^0.9.41
 
 dev_dependencies:
   flutter_test:

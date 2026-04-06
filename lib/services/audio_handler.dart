@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
@@ -27,17 +26,14 @@ class SoundVaultAudioHandler extends BaseAudioHandler
   AudioPlayer get player => _player;
 
   void _initStreams() {
-    // Forward playback state to audio_service
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // Forward current song as mediaItem
     _player.sequenceStateStream.listen((state) {
       if (state?.currentSource?.tag is MediaItem) {
         mediaItem.add(state!.currentSource!.tag as MediaItem);
       }
     });
 
-    // Auto advance
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         skipToNext();
@@ -86,27 +82,26 @@ class SoundVaultAudioHandler extends BaseAudioHandler
   Future<void> seek(Duration position) => _player.seek(position);
 
   @override
-Future<void> skipToNext() async {
-  _onSkipNext?.call();
-}
-
-@override
-Future<void> skipToPrevious() async {
-  _onSkipPrev?.call();
-}
+  Future<void> skipToNext() async {
+    _onSkipNext?.call();
+  }
 
   @override
+  Future<void> skipToPrevious() async {
+    _onSkipPrev?.call();
+  }
+
+  // Custom method — not an override of BaseAudioHandler
   Future<void> playSong(MediaItem item, String filePath) async {
-  mediaItem.add(item);
-  await _player.setAudioSource(
-    AudioSource.uri(Uri.file(filePath), tag: item),
-  );
-  await _player.play();
-}
+    mediaItem.add(item);
+    await _player.setAudioSource(
+      AudioSource.uri(Uri.file(filePath), tag: item),
+    );
+    await _player.play();
+  }
 
-  @override
   Future<void> dispose() async {
     await _player.dispose();
-    return super.stop();
+    await stop();
   }
 }

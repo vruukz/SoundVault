@@ -29,7 +29,7 @@ class BarVisualizerPainter extends CustomPainter {
           end: Alignment.topCenter,
           colors: [
             color,
-            color.withOpacity(0.4),
+            color.withValues(alpha: 0.4),
           ],
         ).createShader(Rect.fromLTWH(x, size.height - h, bw, h))
         ..style = PaintingStyle.fill;
@@ -49,7 +49,10 @@ class BarVisualizerPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [color.withOpacity(0.3), color.withOpacity(0.05)],
+            colors: [
+              color.withValues(alpha: 0.3),
+              color.withValues(alpha: 0.05),
+            ],
           ).createShader(Rect.fromLTWH(x, size.height, bw, h))
           ..style = PaintingStyle.fill;
         canvas.drawRRect(rect2, paint2);
@@ -91,14 +94,12 @@ class WaveformVisualizerPainter extends CustomPainter {
       }
     }
 
-    // Fill between top and bottom wave
     final fillPath = Path()..addPath(path, Offset.zero);
     for (int i = data.length - 1; i >= 0; i--) {
       final x = (i / (data.length - 1)) * size.width;
       final amp = data[i] * mid * 0.9;
       final y2 = mid + amp;
       if (i == data.length - 1) fillPath.lineTo(x, y2);
-      // simplified fill
     }
 
     final strokePaint = Paint()
@@ -108,14 +109,13 @@ class WaveformVisualizerPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final strokePaint2 = Paint()
-      ..color = color.withOpacity(0.4)
+      ..color = color.withValues(alpha: 0.4)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
 
-    // Center line glow
     final glowPaint = Paint()
-      ..color = color.withOpacity(0.1)
+      ..color = color.withValues(alpha: 0.1)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 6.0
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
@@ -125,12 +125,11 @@ class WaveformVisualizerPainter extends CustomPainter {
     canvas.drawPath(path, strokePaint);
     canvas.drawPath(path2, strokePaint2);
 
-    // Center dot line
     canvas.drawLine(
       Offset(0, mid),
       Offset(size.width, mid),
       Paint()
-        ..color = color.withOpacity(0.08)
+        ..color = color.withValues(alpha: 0.08)
         ..strokeWidth = 1,
     );
   }
@@ -158,12 +157,11 @@ class RadialVisualizerPainter extends CustomPainter {
     final maxBarLen = min(size.width, size.height) * 0.22;
     final count = data.length;
 
-    // Outer glow ring
     canvas.drawCircle(
       center,
       radius,
       Paint()
-        ..color = color.withOpacity(0.05)
+        ..color = color.withValues(alpha: 0.05)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
@@ -178,7 +176,7 @@ class RadialVisualizerPainter extends CustomPainter {
       final endY = center.dy + (radius + barLen) * sin(angle);
 
       final t = data[i];
-      final barColor = Color.lerp(color.withOpacity(0.4), color, t)!;
+      final barColor = Color.lerp(color.withValues(alpha: 0.4), color, t)!;
 
       canvas.drawLine(
         Offset(startX, startY),
@@ -189,28 +187,25 @@ class RadialVisualizerPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
 
-      // Glow dot at tip
       if (data[i] > 0.6) {
         canvas.drawCircle(
           Offset(endX, endY),
           2,
-          Paint()..color = color.withOpacity(data[i] * 0.8),
+          Paint()..color = color.withValues(alpha: data[i] * 0.8),
         );
       }
     }
 
-    // Inner fill circle
     canvas.drawCircle(
       center,
       radius * 0.85,
-      Paint()..color = color.withOpacity(0.04),
+      Paint()..color = color.withValues(alpha: 0.04),
     );
 
-    // Center dot
     canvas.drawCircle(
       center,
       4,
-      Paint()..color = color.withOpacity(0.6),
+      Paint()..color = color.withValues(alpha: 0.6),
     );
   }
 

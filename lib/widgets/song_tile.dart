@@ -43,12 +43,12 @@ class SongTile extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isPlaying
-              ? AppTheme.accentGreen.withOpacity(0.06)
+              ? AppTheme.accentGreen.withValues(alpha: 0.06)
               : AppTheme.cardColor,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isPlaying
-                ? AppTheme.accentGreen.withOpacity(0.3)
+                ? AppTheme.accentGreen.withValues(alpha: 0.3)
                 : AppTheme.borderColor,
           ),
         ),
@@ -115,7 +115,7 @@ class SongTile extends StatelessWidget {
 
   Widget _fallback(Color color) {
     return Container(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       child: Center(
         child: isPlaying
             ? const _PlayingBars(color: AppTheme.accentGreen)

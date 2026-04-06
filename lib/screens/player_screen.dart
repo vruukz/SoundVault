@@ -358,13 +358,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildVisualizerSection(PlayerService service) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppTheme.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.borderColor),
       ),
-      child: const VisualizerWidget(height: 140),
+      child: const VisualizerWidget(height: 80),
     );
   }
 
