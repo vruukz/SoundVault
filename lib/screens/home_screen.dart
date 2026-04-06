@@ -9,6 +9,8 @@ import '../models/song.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/song_tile.dart';
 import 'player_screen.dart';
+import 'artist_screen.dart';
+import 'album_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -502,10 +504,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return GestureDetector(
               onTap: () {
-                service.playSong(entry.value.first, queue: entry.value);
-                Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const PlayerScreen()));
-              },
+  Navigator.push(context, MaterialPageRoute(
+    builder: (_) => AlbumScreen(
+      album: entry.key,
+      songs: entry.value,
+    ),
+  ));
+},
               child: Container(
                 decoration: BoxDecoration(
                   color: AppTheme.cardColor,
@@ -575,9 +580,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildArtistList(PlayerService service) {
     final artists = <String, List<Song>>{};
-    for (final s in service.library) {
-      artists.putIfAbsent(s.artist, () => []).add(s);
-    }
+    // New — strip featured artists
+for (final s in service.library) {
+  final mainArtist = s.artist
+      .split(RegExp(r'\s*(;|,|\s+feat\.?|\s+ft\.?|\s+featuring|\s+&)\s*', caseSensitive: false))
+      .first
+      .trim();
+  artists.putIfAbsent(mainArtist, () => []).add(s);
+}
     final artistList = artists.entries.toList();
 
     return SliverPadding(
@@ -591,12 +601,13 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: GestureDetector(
                 onTap: () {
-                  service.playSong(entry.value.first, queue: entry.value);
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const PlayerScreen()));
-                },
+  Navigator.push(context, MaterialPageRoute(
+    builder: (_) => ArtistScreen(
+      artist: entry.key,
+      songs: entry.value,
+    ),
+  ));
+},
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -607,26 +618,50 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Row(
                     children: [
                       Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                              color: color.withValues(alpha: 0.3)),
-                        ),
-                        child: Center(
-                          child: Text(
-                            entry.key.isNotEmpty
-                                ? entry.key[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                                color: color,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                      ),
+  width: 44,
+  height: 44,
+  decoration: BoxDecoration(
+    color: color.withValues(alpha: 0.1),
+    shape: BoxShape.circle,
+    border: Border.all(color: color.withValues(alpha: 0.3)),
+  ),
+  child: ClipOval(
+    child: () {
+      final coverSong = entry.value.firstWhere(
+        (s) => s.albumArtPath != null,
+        orElse: () => entry.value.first,
+      );
+      final art = coverSong.albumArtPath;
+      if (art != null) {
+        if (_isNetworkUrl(art)) {
+          return Image.network(art,
+              width: 44, height: 44, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  entry.key.isNotEmpty ? entry.key[0].toUpperCase() : '?',
+                  style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ));
+        } else {
+          return Image.file(File(art),
+              width: 44, height: 44, fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  entry.key.isNotEmpty ? entry.key[0].toUpperCase() : '?',
+                  style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ));
+        }
+      }
+      return Center(
+        child: Text(
+          entry.key.isNotEmpty ? entry.key[0].toUpperCase() : '?',
+          style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+      );
+    }(),
+  ),
+),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Column(
