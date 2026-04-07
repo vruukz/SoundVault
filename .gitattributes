@@ -1,0 +1,4 @@
+# Tell GitHub to treat this as a Dart project
+*.dart linguist-language=Dart
+*.html linguist-vendored=true
+*.js linguist-vendored=true
