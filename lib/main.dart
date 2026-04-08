@@ -46,11 +46,19 @@ class SoundVaultApp extends StatelessWidget {
         final service = PlayerService();
 
         // Wire skip callbacks so lock screen buttons control SoLoud playback
-        audioHandler.setSkipCallbacks(
-          onNext: service.skipNext,
-          onPrev: service.skipPrev,
-        );
-
+        audioHandler.setPlaybackCallbacks(
+  onPlay: () {
+    if (!service.isPlaying) service.togglePlay();
+  },
+  onPause: () {
+    if (service.isPlaying) service.togglePlay();
+  },
+  onSeek: service.seekTo,
+);
+audioHandler.setSkipCallbacks(
+  onNext: service.skipNext,
+  onPrev: service.skipPrev,
+);
         // Whenever PlayerService changes, push updated MediaItem + state
         // to audio_service so the notification bar stays in sync
         service.addListener(() {
@@ -68,27 +76,25 @@ class SoundVaultApp extends StatelessWidget {
             );
             audioHandler.mediaItem.add(item);
             audioHandler.playbackState.add(
-              PlaybackState(
-                controls: [
-                  MediaControl.skipToPrevious,
-                  service.isPlaying ? MediaControl.pause : MediaControl.play,
-                  MediaControl.skipToNext,
-                ],
-                systemActions: const {
-                  MediaAction.seek,
-                  MediaAction.seekForward,
-                  MediaAction.seekBackward,
-                },
-                androidCompactActionIndices: const [0, 1, 2],
-                processingState: service.isPlaying
-                    ? AudioProcessingState.ready
-                    : AudioProcessingState.ready,
-                playing: service.isPlaying,
-                updatePosition: service.position,
-                bufferedPosition: service.duration,
-                speed: 1.0,
-              ),
-            );
+  PlaybackState(
+    controls: [
+      MediaControl.skipToPrevious,
+      service.isPlaying ? MediaControl.pause : MediaControl.play,
+      MediaControl.skipToNext,
+    ],
+    systemActions: const {
+      MediaAction.seek,
+      MediaAction.seekForward,
+      MediaAction.seekBackward,
+    },
+    androidCompactActionIndices: const [0, 1, 2],
+    processingState: AudioProcessingState.ready,
+    playing: service.isPlaying,
+    updatePosition: service.position,
+    bufferedPosition: service.duration,
+    speed: 1.0,
+  ),
+);
           }
         });
 

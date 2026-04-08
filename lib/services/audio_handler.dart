@@ -7,50 +7,47 @@ import 'package:flutter/foundation.dart';
 class SoundVaultAudioHandler extends BaseAudioHandler
     with SeekHandler {
 
-  VoidCallback? _onSkipNext;
-  VoidCallback? _onSkipPrev;
-  VoidCallback? _onTogglePlay;
+  Future<void> Function()? _onSkipNext;
+Future<void> Function()? _onSkipPrev;
+  VoidCallback? _onPlay;
+  VoidCallback? _onPause;
   void Function(double)? _onSeek;
 
   void setSkipCallbacks({
-    required VoidCallback onNext,
-    required VoidCallback onPrev,
-  }) {
-    _onSkipNext = onNext;
-    _onSkipPrev = onPrev;
-  }
+  required Future<void> Function() onNext,
+  required Future<void> Function() onPrev,
+}) {
+  _onSkipNext = onNext;
+  _onSkipPrev = onPrev;
+}
 
   void setPlaybackCallbacks({
-    required VoidCallback onTogglePlay,
-    required void Function(double progress) onSeek,
-  }) {
-    _onTogglePlay = onTogglePlay;
-    _onSeek = onSeek;
-  }
+  required VoidCallback onPlay,
+  required VoidCallback onPause,
+  required void Function(double progress) onSeek,
+}) {
+  _onPlay = onPlay;
+  _onPause = onPause;
+  _onSeek = onSeek;
+}
 
   // Called when user taps Play on lock screen / notification
   @override
-  Future<void> play() async {
-    _onTogglePlay?.call();
-  }
+Future<void> play() async => _onPlay?.call();
 
-  // Called when user taps Pause on lock screen / notification
-  @override
-  Future<void> pause() async {
-    _onTogglePlay?.call();
-  }
+@override
+Future<void> pause() async => _onPause?.call();
 
   // Called when user taps Next
   @override
-  Future<void> skipToNext() async {
-    _onSkipNext?.call();
-  }
+Future<void> skipToNext() async {
+  await _onSkipNext?.call();
+}
 
-  // Called when user taps Previous
-  @override
-  Future<void> skipToPrevious() async {
-    _onSkipPrev?.call();
-  }
+@override
+Future<void> skipToPrevious() async {
+  await _onSkipPrev?.call();
+}
 
   // Called when user seeks from lock screen
   @override
