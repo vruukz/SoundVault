@@ -277,14 +277,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Column(
       children: [
         SliderTheme(
-          data: SliderThemeData(
+          data: const SliderThemeData(
             trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: RoundSliderOverlayShape(overlayRadius: 14),
             thumbColor: AppTheme.accentGreen,
             activeTrackColor: AppTheme.accentGreen,
             inactiveTrackColor: AppTheme.borderColor,
-            overlayColor: const Color(0x334ADE80),
+            overlayColor: Color(0x334ADE80),
           ),
           child: Slider(
             value: service.progress.clamp(0.0, 1.0),

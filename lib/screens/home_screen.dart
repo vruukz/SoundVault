@@ -26,6 +26,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isSearching = false;
   bool _isScanning = false;
 
+  // Songs tab multi-select mode
+  bool _selectionMode = false;
+  final Set<String> _selectedIds = {};
+
   // For swipe left/right on library
   double _dragStartX = 0;
 
@@ -232,6 +236,110 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Selection mode (Songs tab) ───────────────────────────────────────
+
+  void _enterSelectionMode(String firstId) {
+    setState(() {
+      _selectionMode = true;
+      _selectedIds
+        ..clear()
+        ..add(firstId);
+    });
+  }
+
+  void _toggleSelected(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) _selectionMode = false;
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  // ── Delete confirmation ───────────────────────────────────────────────
+
+  void _confirmDelete(
+    BuildContext context, {
+    required String title,
+    required String message,
+    required VoidCallback onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
+        title: Text(title, style: const TextStyle(color: AppTheme.textPrimary)),
+        content: Text(message,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              onConfirm();
+            },
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: Color(0xFFF87171), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAlbum(
+      BuildContext context, PlayerService service, String album, List<Song> songs) {
+    _confirmDelete(
+      context,
+      title: 'Delete album?',
+      message:
+          'This removes "$album" (${songs.length} song${songs.length != 1 ? 's' : ''}) from your library. The files on disk are not affected.',
+      onConfirm: () => service.removeSongs(songs.map((s) => s.id)),
+    );
+  }
+
+  void _confirmDeleteArtist(
+      BuildContext context, PlayerService service, String artist, List<Song> songs) {
+    _confirmDelete(
+      context,
+      title: 'Delete artist?',
+      message:
+          'This removes everything by "$artist" (${songs.length} song${songs.length != 1 ? 's' : ''}) from your library. The files on disk are not affected.',
+      onConfirm: () => service.removeSongs(songs.map((s) => s.id)),
+    );
+  }
+
+  void _confirmDeleteSelected(BuildContext context, PlayerService service) {
+    final count = _selectedIds.length;
+    _confirmDelete(
+      context,
+      title: 'Delete $count song${count != 1 ? 's' : ''}?',
+      message:
+          'This removes the selected song${count != 1 ? 's' : ''} from your library. The files on disk are not affected.',
+      onConfirm: () {
+        service.removeSongs(_selectedIds);
+        _exitSelectionMode();
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<PlayerService>(
@@ -246,6 +354,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return GestureDetector(
           onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
           onHorizontalDragEnd: (d) {
+            if (_selectionMode) return;
             final dx = d.globalPosition.dx - _dragStartX;
             if (dx < -60) {
               // swipe left = next tab
@@ -291,6 +400,40 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   SliverAppBar _buildAppBar(PlayerService service) {
+    if (_selectionMode) {
+      return SliverAppBar(
+        floating: true,
+        backgroundColor: AppTheme.bgColor,
+        titleSpacing: 4,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary),
+          onPressed: _exitSelectionMode,
+        ),
+        title: Text(
+          '${_selectedIds.length} selected',
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded,
+                color: Color(0xFFF87171)),
+            onPressed: _selectedIds.isEmpty
+                ? null
+                : () => _confirmDeleteSelected(context, service),
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: AppTheme.borderColor),
+        ),
+      );
+    }
+
     return SliverAppBar(
       floating: true,
       backgroundColor: AppTheme.bgColor,
@@ -355,12 +498,18 @@ class _HomeScreenState extends State<HomeScreen> {
             _Tab(
                 label: 'ALBUMS',
                 selected: _tab == 1,
-                onTap: () => setState(() => _tab = 1)),
+                onTap: () {
+                  _exitSelectionMode();
+                  setState(() => _tab = 1);
+                }),
             const SizedBox(width: 8),
             _Tab(
                 label: 'ARTISTS',
                 selected: _tab == 2,
-                onTap: () => setState(() => _tab = 2)),
+                onTap: () {
+                  _exitSelectionMode();
+                  setState(() => _tab = 2);
+                }),
             const Spacer(),
             GestureDetector(
               onTap: () => _showLibrarySettings(context),
@@ -456,22 +605,41 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
-          (context, i) => Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: SongTile(
-              song: songs[i],
-              isPlaying: service.currentSong?.id == songs[i].id &&
-                  service.isPlaying,
-              onTap: () {
-                service.playSong(songs[i], queue: songs);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PlayerScreen()),
-                );
-              },
-              onLongPress: () => _showSongMenu(context, songs[i], service),
-            ),
-          ),
+          (context, i) {
+            final song = songs[i];
+            final selected = _selectedIds.contains(song.id);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: SongTile(
+                song: song,
+                isPlaying: service.currentSong?.id == song.id &&
+                    service.isPlaying,
+                selectionMode: _selectionMode,
+                selected: selected,
+                onTap: () {
+                  if (_selectionMode) {
+                    _toggleSelected(song.id);
+                    return;
+                  }
+                  service.playSong(song, queue: songs);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PlayerScreen()),
+                  );
+                },
+                onLongPress: () {
+                  if (_selectionMode) {
+                    _toggleSelected(song.id);
+                  } else {
+                    _enterSelectionMode(song.id);
+                  }
+                },
+                onMoreTap: _selectionMode
+                    ? null
+                    : () => _showSongMenu(context, song, service),
+              ),
+            );
+          },
           childCount: songs.length,
         ),
       ),
@@ -511,6 +679,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ));
 },
+              onLongPress: () =>
+                  _confirmDeleteAlbum(context, service, entry.key, entry.value),
               child: Container(
                 decoration: BoxDecoration(
                   color: AppTheme.cardColor,
@@ -608,6 +778,8 @@ for (final s in service.library) {
     ),
   ));
 },
+                onLongPress: () =>
+                    _confirmDeleteArtist(context, service, entry.key, entry.value),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(

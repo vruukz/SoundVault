@@ -8,6 +8,9 @@ class SongTile extends StatelessWidget {
   final bool isPlaying;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onMoreTap;
 
   const SongTile({
     super.key,
@@ -15,6 +18,9 @@ class SongTile extends StatelessWidget {
     required this.isPlaying,
     required this.onTap,
     this.onLongPress,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onMoreTap,
   });
 
   Color _color() {
@@ -42,18 +48,32 @@ class SongTile extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isPlaying
-              ? AppTheme.accentGreen.withValues(alpha: 0.06)
-              : AppTheme.cardColor,
+          color: selected
+              ? AppTheme.accentGreen.withValues(alpha: 0.1)
+              : isPlaying
+                  ? AppTheme.accentGreen.withValues(alpha: 0.06)
+                  : AppTheme.cardColor,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isPlaying
-                ? AppTheme.accentGreen.withValues(alpha: 0.3)
-                : AppTheme.borderColor,
+            color: selected
+                ? AppTheme.accentGreen
+                : isPlaying
+                    ? AppTheme.accentGreen.withValues(alpha: 0.3)
+                    : AppTheme.borderColor,
           ),
         ),
         child: Row(
           children: [
+            if (selectionMode) ...[
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? AppTheme.accentGreen : AppTheme.textMuted,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+            ],
             _buildArt(color),
             const SizedBox(width: 12),
             Expanded(
@@ -87,6 +107,14 @@ class SongTile extends StatelessWidget {
               style:
                   const TextStyle(color: AppTheme.textMuted, fontSize: 11),
             ),
+            if (!selectionMode && onMoreTap != null)
+              IconButton(
+                icon: const Icon(Icons.more_vert_rounded,
+                    color: AppTheme.textMuted, size: 18),
+                padding: const EdgeInsets.only(left: 4),
+                constraints: const BoxConstraints(),
+                onPressed: onMoreTap,
+              ),
           ],
         ),
       ),

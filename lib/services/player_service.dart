@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:audiotags/audiotags.dart';
 import 'package:http/http.dart' as http;
+import 'package:just_audio/just_audio.dart' as ja;
 import '../models/song.dart';
 
 enum RepeatMode { none, all, one }
@@ -20,6 +22,17 @@ class PlayerService extends ChangeNotifier {
   final SoLoud _soloud = SoLoud.instance;
   SoundHandle? _handle;
   AudioSource? _source;
+
+  // FIX: SoLoud's bundled decoders only cover MP3/WAV/OGG/FLAC — no AAC/M4A
+  // support. .m4a/.aac files were being scanned in (whitelist included them)
+  // but silently failed to play. just_audio (already a dependency, but
+  // unused) uses the platform's native decoder and handles AAC/M4A fine, so
+  // it's used as a fallback engine for those formats.
+  ja.AudioPlayer? _justAudioPlayer;
+  bool _usingJustAudio = false;
+  StreamSubscription<Duration>? _justAudioPositionSub;
+  StreamSubscription<Duration?>? _justAudioDurationSub;
+  StreamSubscription<ja.ProcessingState>? _justAudioStateSub;
 
   List<Song> _library = [];
   List<Song> _queue = [];
@@ -58,6 +71,9 @@ class PlayerService extends ChangeNotifier {
           : 0.0;
 
   Float32List get fftData {
+    // just_audio (used for AAC/M4A) doesn't feed SoLoud's analyzer, so
+    // _audioData would just show a frozen leftover frame — return silence.
+    if (_usingJustAudio) return Float32List(256);
     if (_audioData == null) return Float32List(256);
     try {
       _audioData!.updateSamples();
@@ -72,6 +88,7 @@ class PlayerService extends ChangeNotifier {
   // FIX: waveform uses FFT data mapped to [-1, 1] so the wave painter
   // sees proper positive/negative swing instead of flat/broken output
   Float32List get waveData {
+    if (_usingJustAudio) return Float32List(256);
     if (_audioData == null) return Float32List(256);
     try {
       _audioData!.updateSamples();
@@ -146,9 +163,9 @@ class PlayerService extends ChangeNotifier {
         result['duration'] = (tag.duration ?? 0) * 1000;
         if (tag.pictures.isNotEmpty) {
           final pic = tag.pictures.first;
-          if (pic.bytes != null && pic.bytes!.isNotEmpty) {
+          if (pic.bytes.isNotEmpty) {
             final coverPath = await _saveCoverArt(
-                pic.bytes!, p.basenameWithoutExtension(filePath));
+                pic.bytes, p.basenameWithoutExtension(filePath));
             result['coverPath'] = coverPath;
           }
         }
@@ -221,6 +238,23 @@ class PlayerService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Bulk delete — used by album/artist long-press delete and the Songs tab
+  // multi-select mode. Single _saveLibrary()/notifyListeners() call instead
+  // of one per song.
+  Future<void> removeSongs(Iterable<String> ids) async {
+    final idSet = ids.toSet();
+    if (idSet.isEmpty) return;
+    if (_currentSong != null && idSet.contains(_currentSong!.id)) {
+      await _stopInternal();
+      _currentSong = null;
+      _currentIndex = -1;
+    }
+    _library.removeWhere((s) => idSet.contains(s.id));
+    _queue.removeWhere((s) => idSet.contains(s.id));
+    await _saveLibrary();
+    notifyListeners();
+  }
+
   void playNext(Song song) {
     if (_queue.isEmpty) {
       _queue = [song];
@@ -283,19 +317,31 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> _stopInternal() async {
     try {
-      if (_handle != null) {
-        await _soloud.stop(_handle!);
-        _handle = null;
-      }
-      if (_source != null) {
-        await _soloud.disposeSource(_source!);
-        _source = null;
+      if (_usingJustAudio) {
+        await _justAudioStateSub?.cancel();
+        await _justAudioPositionSub?.cancel();
+        await _justAudioDurationSub?.cancel();
+        await _justAudioPlayer?.stop();
+      } else {
+        if (_handle != null) {
+          await _soloud.stop(_handle!);
+          _handle = null;
+        }
+        if (_source != null) {
+          await _soloud.disposeSource(_source!);
+          _source = null;
+        }
       }
     } catch (e) {
       debugPrint('Stop error: $e');
     }
     _isPlaying = false;
     _position = Duration.zero;
+  }
+
+  bool _needsJustAudio(String filePath) {
+    final ext = p.extension(filePath).toLowerCase();
+    return ext == '.m4a' || ext == '.aac';
   }
 
   Future<void> playSong(Song song, {List<Song>? queue}) async {
@@ -309,9 +355,20 @@ class PlayerService extends ChangeNotifier {
 
     await _stopInternal();
 
+    _usingJustAudio = _needsJustAudio(song.filePath);
+    if (_usingJustAudio) {
+      await _playWithJustAudio(song);
+    } else {
+      await _playWithSoLoud(song);
+    }
+  }
+
+  Future<void> _playWithSoLoud(Song song) async {
     try {
       _source = await _soloud.loadFile(song.filePath);
-      _handle = await _soloud.play(_source!, volume: _volume);
+      // FIX: in flutter_soloud 4.x, play() returns SoundHandle directly
+      // (a synchronous FFI call) rather than Future<SoundHandle> — no await.
+      _handle = _soloud.play(_source!, volume: _volume);
 
       // FIX: set _isPlaying = true BEFORE starting the poll loop.
       // Previously it was set after _pollPosition(), so the while loop
@@ -324,6 +381,49 @@ class PlayerService extends ChangeNotifier {
       _pollPosition(generation);
     } catch (e) {
       debugPrint('Play error: $e');
+      _isPlaying = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _playWithJustAudio(Song song) async {
+    try {
+      _justAudioPlayer ??= ja.AudioPlayer();
+      final player = _justAudioPlayer!;
+
+      await player.setFilePath(song.filePath);
+      await player.setVolume(_volume);
+
+      _isPlaying = true;
+      notifyListeners();
+
+      final generation = ++_playGeneration;
+
+      await _justAudioPositionSub?.cancel();
+      _justAudioPositionSub = player.positionStream.listen((pos) {
+        if (generation != _playGeneration) return;
+        _position = pos;
+        notifyListeners();
+      });
+
+      await _justAudioDurationSub?.cancel();
+      _justAudioDurationSub = player.durationStream.listen((dur) {
+        if (generation != _playGeneration || dur == null) return;
+        _duration = dur;
+        notifyListeners();
+      });
+
+      await _justAudioStateSub?.cancel();
+      _justAudioStateSub = player.processingStateStream.listen((state) {
+        if (generation != _playGeneration) return;
+        if (state == ja.ProcessingState.completed) {
+          _onTrackComplete();
+        }
+      });
+
+      await player.play();
+    } catch (e) {
+      debugPrint('just_audio play error: $e');
       _isPlaying = false;
       notifyListeners();
     }
@@ -369,6 +469,23 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> togglePlay() async {
+    if (_usingJustAudio) {
+      if (_justAudioPlayer == null) return;
+      try {
+        if (_isPlaying) {
+          await _justAudioPlayer!.pause();
+          _isPlaying = false;
+        } else {
+          await _justAudioPlayer!.play();
+          _isPlaying = true;
+        }
+        notifyListeners();
+      } catch (e) {
+        debugPrint('togglePlay error: $e');
+      }
+      return;
+    }
+
     if (_handle == null) return;
     try {
       if (_isPlaying) {
@@ -412,6 +529,20 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> seekTo(double progress) async {
+    if (_usingJustAudio) {
+      if (_justAudioPlayer == null) return;
+      try {
+        final target = Duration(
+            milliseconds: (_duration.inMilliseconds * progress).round());
+        await _justAudioPlayer!.seek(target);
+        _position = target;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Seek error: $e');
+      }
+      return;
+    }
+
     if (_handle == null || _source == null) return;
     try {
       final len = _soloud.getLength(_source!);
@@ -443,7 +574,9 @@ class PlayerService extends ChangeNotifier {
 
   Future<void> setVolume(double v) async {
     _volume = v;
-    if (_handle != null) {
+    if (_usingJustAudio) {
+      await _justAudioPlayer?.setVolume(v);
+    } else if (_handle != null) {
       _soloud.setVolume(_handle!, v);
     }
     notifyListeners();
@@ -452,6 +585,7 @@ class PlayerService extends ChangeNotifier {
   @override
   void dispose() {
     _stopInternal();
+    _justAudioPlayer?.dispose();
     _audioData?.dispose();
     _soloud.deinit();
     super.dispose();
