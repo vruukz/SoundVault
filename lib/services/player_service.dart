@@ -11,6 +11,7 @@ import 'package:audiotags/audiotags.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart' as ja;
 import '../models/song.dart';
+import '../models/playlist.dart';
 
 enum RepeatMode { none, all, one }
 enum VisualizerMode { bars, waveform, radial }
@@ -18,6 +19,7 @@ enum VisualizerMode { bars, waveform, radial }
 class PlayerService extends ChangeNotifier {
   static const _libraryKey = 'soundvault_library';
   static const _watchedFolderKey = 'soundvault_watched_folder';
+  static const _playlistsKey = 'soundvault_playlists';
 
   final SoLoud _soloud = SoLoud.instance;
   SoundHandle? _handle;
@@ -35,6 +37,7 @@ class PlayerService extends ChangeNotifier {
   StreamSubscription<ja.ProcessingState>? _justAudioStateSub;
 
   List<Song> _library = [];
+  List<Playlist> _playlists = [];
   List<Song> _queue = [];
   Song? _currentSong;
   int _currentIndex = -1;
@@ -53,6 +56,7 @@ class PlayerService extends ChangeNotifier {
   AudioData? _audioData;
 
   List<Song> get library => _library;
+  List<Playlist> get playlists => _playlists;
   List<Song> get queue => _queue;
   Song? get currentSong => _currentSong;
   int get currentIndex => _currentIndex;
@@ -129,6 +133,11 @@ class PlayerService extends ChangeNotifier {
       final list = jsonDecode(data) as List;
       _library = list.map((j) => Song.fromJson(j)).toList();
     }
+    final playlistData = prefs.getString(_playlistsKey);
+    if (playlistData != null) {
+      final list = jsonDecode(playlistData) as List;
+      _playlists = list.map((j) => Playlist.fromJson(j)).toList();
+    }
     _watchedFolder = prefs.getString(_watchedFolderKey);
     notifyListeners();
   }
@@ -137,6 +146,68 @@ class PlayerService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         _libraryKey, jsonEncode(_library.map((s) => s.toJson()).toList()));
+  }
+
+  Future<void> _savePlaylists() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_playlistsKey,
+        jsonEncode(_playlists.map((p) => p.toJson()).toList()));
+  }
+
+  // ── Playlists ─────────────────────────────────────────────────────
+
+  List<Song> songsForPlaylist(Playlist playlist) {
+    final byId = {for (final s in _library) s.id: s};
+    return playlist.songIds
+        .map((id) => byId[id])
+        .whereType<Song>()
+        .toList();
+  }
+
+  Future<Playlist> createPlaylist(String name) async {
+    final playlist = Playlist(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+    );
+    _playlists.add(playlist);
+    await _savePlaylists();
+    notifyListeners();
+    return playlist;
+  }
+
+  Future<void> renamePlaylist(String id, String name) async {
+    final index = _playlists.indexWhere((p) => p.id == id);
+    if (index == -1) return;
+    _playlists[index] = _playlists[index].copyWith(name: name);
+    await _savePlaylists();
+    notifyListeners();
+  }
+
+  Future<void> deletePlaylist(String id) async {
+    _playlists.removeWhere((p) => p.id == id);
+    await _savePlaylists();
+    notifyListeners();
+  }
+
+  Future<void> addSongToPlaylist(String playlistId, String songId) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index == -1) return;
+    final playlist = _playlists[index];
+    if (playlist.songIds.contains(songId)) return;
+    _playlists[index] =
+        playlist.copyWith(songIds: [...playlist.songIds, songId]);
+    await _savePlaylists();
+    notifyListeners();
+  }
+
+  Future<void> removeSongFromPlaylist(String playlistId, String songId) async {
+    final index = _playlists.indexWhere((p) => p.id == playlistId);
+    if (index == -1) return;
+    final playlist = _playlists[index];
+    _playlists[index] = playlist.copyWith(
+        songIds: playlist.songIds.where((id) => id != songId).toList());
+    await _savePlaylists();
+    notifyListeners();
   }
 
   Future<void> clearLibrary() async {
@@ -234,6 +305,7 @@ class PlayerService extends ChangeNotifier {
     }
     _library.removeWhere((s) => s.id == id);
     _queue.removeWhere((s) => s.id == id);
+    _removeFromPlaylists({id});
     await _saveLibrary();
     notifyListeners();
   }
@@ -251,8 +323,19 @@ class PlayerService extends ChangeNotifier {
     }
     _library.removeWhere((s) => idSet.contains(s.id));
     _queue.removeWhere((s) => idSet.contains(s.id));
+    _removeFromPlaylists(idSet);
     await _saveLibrary();
     notifyListeners();
+  }
+
+  void _removeFromPlaylists(Set<String> songIds) {
+    for (var i = 0; i < _playlists.length; i++) {
+      final playlist = _playlists[i];
+      _playlists[i] = playlist.copyWith(
+          songIds:
+              playlist.songIds.where((id) => !songIds.contains(id)).toList());
+    }
+    _savePlaylists();
   }
 
   void playNext(Song song) {

@@ -11,6 +11,7 @@ import '../widgets/song_tile.dart';
 import 'player_screen.dart';
 import 'artist_screen.dart';
 import 'album_screen.dart';
+import 'playlist_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -349,7 +350,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 _search.isEmpty ||
                 s.title.toLowerCase().contains(_search.toLowerCase()) ||
                 s.artist.toLowerCase().contains(_search.toLowerCase()))
-            .toList();
+            .toList()
+          ..sort((a, b) =>
+              a.title.toLowerCase().compareTo(b.title.toLowerCase()));
 
         return GestureDetector(
           onHorizontalDragStart: (d) => _dragStartX = d.globalPosition.dx,
@@ -358,10 +361,10 @@ class _HomeScreenState extends State<HomeScreen> {
             final dx = d.globalPosition.dx - _dragStartX;
             if (dx < -60) {
               // swipe left = next tab
-              setState(() => _tab = (_tab + 1).clamp(0, 2));
+              setState(() => _tab = (_tab + 1).clamp(0, 3));
             } else if (dx > 60) {
               // swipe right = prev tab
-              setState(() => _tab = (_tab - 1).clamp(0, 2));
+              setState(() => _tab = (_tab - 1).clamp(0, 3));
             }
           },
           child: Scaffold(
@@ -376,6 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (_tab == 0) _buildSongList(songs, service),
                       if (_tab == 1) _buildAlbumGrid(service),
                       if (_tab == 2) _buildArtistList(service),
+                      if (_tab == 3) _buildPlaylistList(service),
                       const SliverToBoxAdapter(child: SizedBox(height: 100)),
                     ],
                   ),
@@ -490,27 +494,44 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: Row(
           children: [
-            _Tab(
-                label: 'SONGS',
-                selected: _tab == 0,
-                onTap: () => setState(() => _tab = 0)),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _Tab(
+                        label: 'SONGS',
+                        selected: _tab == 0,
+                        onTap: () => setState(() => _tab = 0)),
+                    const SizedBox(width: 8),
+                    _Tab(
+                        label: 'ALBUMS',
+                        selected: _tab == 1,
+                        onTap: () {
+                          _exitSelectionMode();
+                          setState(() => _tab = 1);
+                        }),
+                    const SizedBox(width: 8),
+                    _Tab(
+                        label: 'ARTISTS',
+                        selected: _tab == 2,
+                        onTap: () {
+                          _exitSelectionMode();
+                          setState(() => _tab = 2);
+                        }),
+                    const SizedBox(width: 8),
+                    _Tab(
+                        label: 'PLAYLISTS',
+                        selected: _tab == 3,
+                        onTap: () {
+                          _exitSelectionMode();
+                          setState(() => _tab = 3);
+                        }),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
-            _Tab(
-                label: 'ALBUMS',
-                selected: _tab == 1,
-                onTap: () {
-                  _exitSelectionMode();
-                  setState(() => _tab = 1);
-                }),
-            const SizedBox(width: 8),
-            _Tab(
-                label: 'ARTISTS',
-                selected: _tab == 2,
-                onTap: () {
-                  _exitSelectionMode();
-                  setState(() => _tab = 2);
-                }),
-            const Spacer(),
             GestureDetector(
               onTap: () => _showLibrarySettings(context),
               child: Container(
@@ -651,7 +672,8 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final s in service.library) {
       albums.putIfAbsent(s.album, () => []).add(s);
     }
-    final albumList = albums.entries.toList();
+    final albumList = albums.entries.toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -758,7 +780,8 @@ for (final s in service.library) {
       .trim();
   artists.putIfAbsent(mainArtist, () => []).add(s);
 }
-    final artistList = artists.entries.toList();
+    final artistList = artists.entries.toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -865,6 +888,163 @@ for (final s in service.library) {
     );
   }
 
+  // ── Playlists tab ────────────────────────────────────────────────────
+
+  void _createPlaylist(BuildContext context, PlayerService service) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
+        title: const Text('New playlist',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: const InputDecoration(
+            hintText: 'Playlist name',
+            hintStyle: TextStyle(color: AppTheme.textMuted),
+          ),
+          onSubmitted: (v) {
+            final name = v.trim();
+            if (name.isNotEmpty) {
+              service.createPlaylist(name);
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                service.createPlaylist(name);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Create',
+                style: TextStyle(
+                    color: AppTheme.accentGreen, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaylistList(PlayerService service) {
+    final playlists = [...service.playlists]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            if (i == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  onTap: () => _createPlaylist(context, service),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.add_rounded,
+                            color: AppTheme.accentGreen, size: 18),
+                        SizedBox(width: 10),
+                        Text('New playlist',
+                            style: TextStyle(
+                                color: AppTheme.accentGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            final playlist = playlists[i - 1];
+            final songCount = playlist.songIds.length;
+            final color = _itemColor(playlist.name);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlaylistScreen(playlistId: playlist.id),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border:
+                              Border.all(color: color.withValues(alpha: 0.3)),
+                        ),
+                        child: Icon(Icons.queue_music_rounded,
+                            color: color, size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(playlist.name,
+                                style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14)),
+                            Text('$songCount song${songCount != 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                    color: AppTheme.textMuted, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textMuted),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+          childCount: playlists.length + 1,
+        ),
+      ),
+    );
+  }
+
   void _showSongMenu(BuildContext context, Song song, PlayerService service) {
     showModalBottomSheet(
       context: context,
@@ -928,6 +1108,17 @@ for (final s in service.library) {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.playlist_add_rounded,
+                  color: AppTheme.textSecondary),
+              title: const Text('Add to playlist',
+                  style: TextStyle(color: AppTheme.textSecondary)),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddToPlaylistSheet(context, song, service);
+              },
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.info_outline_rounded,
                   color: AppTheme.textSecondary),
               title: const Text('Song info',
@@ -980,6 +1171,116 @@ for (final s in service.library) {
           ],
         ),
       ),
+    );
+  }
+
+  void _showAddToPlaylistSheet(
+      BuildContext context, Song song, PlayerService service) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: AppTheme.borderColor),
+      ),
+      builder: (_) {
+        final playlists = [...service.playlists]
+          ..sort(
+              (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'ADD TO PLAYLIST',
+                  style: TextStyle(
+                    color: AppTheme.accentGreen,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.add_rounded,
+                      color: AppTheme.accentGreen),
+                  title: const Text('New playlist',
+                      style: TextStyle(
+                          color: AppTheme.accentGreen,
+                          fontWeight: FontWeight.w600)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final controller = TextEditingController();
+                    final name = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppTheme.cardColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        title: const Text('New playlist',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        content: TextField(
+                          controller: controller,
+                          autofocus: true,
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                          decoration: const InputDecoration(
+                            hintText: 'Playlist name',
+                            hintStyle: TextStyle(color: AppTheme.textMuted),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel',
+                                style: TextStyle(color: AppTheme.textMuted)),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(ctx, controller.text.trim()),
+                            child: const Text('Create',
+                                style: TextStyle(
+                                    color: AppTheme.accentGreen,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (name != null && name.isNotEmpty) {
+                      final playlist = await service.createPlaylist(name);
+                      await service.addSongToPlaylist(playlist.id, song.id);
+                    }
+                  },
+                ),
+                if (playlists.isNotEmpty) ...[
+                  const Divider(color: AppTheme.borderColor),
+                  ...playlists.map((playlist) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.queue_music_rounded,
+                            color: AppTheme.textSecondary),
+                        title: Text(playlist.name,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary)),
+                        trailing: playlist.songIds.contains(song.id)
+                            ? const Icon(Icons.check_rounded,
+                                color: AppTheme.accentGreen, size: 18)
+                            : null,
+                        onTap: () {
+                          service.addSongToPlaylist(playlist.id, song.id);
+                          Navigator.pop(context);
+                        },
+                      )),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
