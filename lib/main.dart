@@ -1,4 +1,5 @@
 import 'package:audio_service/audio_service.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -32,18 +33,32 @@ Future<void> main() async {
     ),
   );
 
-  runApp(SoundVaultApp(audioHandler: _audioHandler));
+  // Pause playback when the audio route disappears — e.g. a Bluetooth
+  // speaker/headset disconnects, or wired headphones are unplugged —
+  // instead of blaring out of the device speaker unannounced.
+  final session = await AudioSession.instance;
+  await session.configure(const AudioSessionConfiguration.music());
+
+  runApp(SoundVaultApp(audioHandler: _audioHandler, audioSession: session));
 }
 
 class SoundVaultApp extends StatelessWidget {
   final SoundVaultAudioHandler audioHandler;
-  const SoundVaultApp({super.key, required this.audioHandler});
+  final AudioSession audioSession;
+  const SoundVaultApp(
+      {super.key, required this.audioHandler, required this.audioSession});
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) {
         final service = PlayerService();
+
+        // Bluetooth speaker/headset disconnected (or headphones unplugged):
+        // pause rather than let playback jump to the phone/laptop speaker.
+        audioSession.becomingNoisyEventStream.listen((_) {
+          service.pause();
+        });
 
         // Wire skip callbacks so lock screen buttons control SoLoud playback
         audioHandler.setPlaybackCallbacks(

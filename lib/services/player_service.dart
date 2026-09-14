@@ -587,6 +587,32 @@ class PlayerService extends ChangeNotifier {
     }
   }
 
+  // Pauses without toggling — used when the audio route disappears (e.g. a
+  // Bluetooth speaker disconnects) so we never accidentally resume playback.
+  Future<void> pause() async {
+    if (!_isPlaying) return;
+    if (_usingJustAudio) {
+      if (_justAudioPlayer == null) return;
+      try {
+        await _justAudioPlayer!.pause();
+        _isPlaying = false;
+        notifyListeners();
+      } catch (e) {
+        debugPrint('pause error: $e');
+      }
+      return;
+    }
+
+    if (_handle == null) return;
+    try {
+      _soloud.setPause(_handle!, true);
+      _isPlaying = false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('pause error: $e');
+    }
+  }
+
   Future<void> skipNext() async {
     if (_queue.isEmpty) return;
     if (_isShuffle) {
