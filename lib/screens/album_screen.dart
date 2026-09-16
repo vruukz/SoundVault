@@ -144,7 +144,7 @@ class AlbumScreen extends StatelessWidget {
                             color:
                                 AppTheme.accentGreen.withValues(alpha: 0.3)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.play_arrow_rounded,

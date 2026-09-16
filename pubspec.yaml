@@ -22,6 +22,7 @@ dependencies:
   just_audio: ^0.10.6
   just_audio_windows: ^0.2.2
   audio_session: ^0.1.25
+  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_test:

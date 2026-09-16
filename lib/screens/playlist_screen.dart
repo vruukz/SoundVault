@@ -62,7 +62,7 @@ class PlaylistScreen extends StatelessWidget {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('Save',
+            child: Text('Save',
                 style: TextStyle(
                     color: AppTheme.accentGreen, fontWeight: FontWeight.w700)),
           ),
@@ -227,7 +227,7 @@ class PlaylistScreen extends StatelessWidget {
                           border: Border.all(
                               color: AppTheme.accentGreen.withValues(alpha: 0.3)),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.play_arrow_rounded,

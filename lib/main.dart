@@ -12,6 +12,7 @@ late SoundVaultAudioHandler _audioHandler;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppTheme.loadAccent();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -115,11 +116,14 @@ audioHandler.setSkipCallbacks(
 
         return service;
       },
-      child: MaterialApp(
-        title: 'SoundVault',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.darkTheme,
-        home: const HomeScreen(),
+      child: ValueListenableBuilder<Color>(
+        valueListenable: AppTheme.accentNotifier,
+        builder: (context, accent, _) => MaterialApp(
+          title: 'SoundVault',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.darkTheme,
+          home: const HomeScreen(),
+        ),
       ),
     );
   }

@@ -146,7 +146,7 @@ class SongTile extends StatelessWidget {
       color: color.withValues(alpha: 0.1),
       child: Center(
         child: isPlaying
-            ? const _PlayingBars(color: AppTheme.accentGreen)
+            ? _PlayingBars(color: AppTheme.accentGreen)
             : Text(
                 song.title.isNotEmpty ? song.title[0].toUpperCase() : '?',
                 style: TextStyle(

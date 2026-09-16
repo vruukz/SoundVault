@@ -107,7 +107,7 @@ class MiniPlayer extends StatelessWidget {
                       child: Container(
                         width: 36,
                         height: 36,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: AppTheme.accentGreen,
                           shape: BoxShape.circle,
                         ),
@@ -137,7 +137,7 @@ class MiniPlayer extends StatelessWidget {
                     value: service.progress,
                     backgroundColor: AppTheme.borderColor,
                     valueColor:
-                        const AlwaysStoppedAnimation(AppTheme.accentGreen),
+                        AlwaysStoppedAnimation(AppTheme.accentGreen),
                     minHeight: 2,
                   ),
                 ),

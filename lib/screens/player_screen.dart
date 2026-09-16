@@ -112,7 +112,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
           const Spacer(),
-          const Text(
+          Text(
             'NOW PLAYING',
             style: TextStyle(
               color: AppTheme.accentGreen,
@@ -277,14 +277,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Column(
       children: [
         SliderTheme(
-          data: const SliderThemeData(
+          data: SliderThemeData(
             trackHeight: 3,
-            thumbShape: RoundSliderThumbShape(enabledThumbRadius: 6),
-            overlayShape: RoundSliderOverlayShape(overlayRadius: 14),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
             thumbColor: AppTheme.accentGreen,
             activeTrackColor: AppTheme.accentGreen,
             inactiveTrackColor: AppTheme.borderColor,
-            overlayColor: Color(0x334ADE80),
+            overlayColor: AppTheme.accentGreen.withOpacity(0.2),
           ),
           child: Slider(
             value: service.progress.clamp(0.0, 1.0),
@@ -409,7 +409,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'UP NEXT',
           style: TextStyle(
             color: AppTheme.accentGreen,
@@ -520,7 +520,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('OK',
+                        child: Text('OK',
                             style: TextStyle(color: AppTheme.accentGreen)),
                       ),
                     ],

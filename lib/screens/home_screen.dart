@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:path/path.dart' as p;
 import '../services/player_service.dart';
 import '../theme/app_theme.dart';
@@ -138,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'LIBRARY SETTINGS',
                 style: TextStyle(
                   color: AppTheme.accentGreen,
@@ -158,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.folder_rounded,
+                      Icon(Icons.folder_rounded,
                           color: AppTheme.accentGreen, size: 16),
                       const SizedBox(width: 10),
                       Expanded(
@@ -179,13 +180,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: _isScanning
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                               strokeWidth: 2, color: AppTheme.accentGreen),
                         )
-                      : const Icon(Icons.refresh_rounded,
+                      : Icon(Icons.refresh_rounded,
                           color: AppTheme.accentGreen),
                   title: const Text('Rescan folder',
                       style: TextStyle(color: AppTheme.textSecondary)),
@@ -222,10 +223,62 @@ class _HomeScreenState extends State<HomeScreen> {
                   await _addFiles();
                 },
               ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.palette_outlined,
+                    color: AppTheme.accentGreen),
+                title: const Text('Accent color',
+                    style: TextStyle(color: AppTheme.textSecondary)),
+                trailing: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGreen,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openAccentPicker(context);
+                },
+              ),
               const SizedBox(height: 8),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _openAccentPicker(BuildContext context) {
+    Color pending = AppTheme.accentGreen;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.cardColor,
+        title: const Text('Accent color', style: TextStyle(color: AppTheme.textPrimary)),
+        content: SingleChildScrollView(
+          child: ColorPicker(
+            pickerColor: pending,
+            onColorChanged: (color) => pending = color,
+            enableAlpha: false,
+            labelTypes: const [],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              AppTheme.setAccent(pending);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Apply'),
+          ),
+        ],
       ),
     );
   }
@@ -575,7 +628,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     border: Border.all(
                         color: AppTheme.accentGreen.withValues(alpha: 0.3)),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.folder_open_rounded,
@@ -932,7 +985,7 @@ for (final s in service.library) {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('Create',
+            child: Text('Create',
                 style: TextStyle(
                     color: AppTheme.accentGreen, fontWeight: FontWeight.w700)),
           ),
@@ -964,7 +1017,7 @@ for (final s in service.library) {
                       border: Border.all(
                           color: AppTheme.accentGreen.withValues(alpha: 0.3)),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
                         Icon(Icons.add_rounded,
                             color: AppTheme.accentGreen, size: 18),
@@ -1071,7 +1124,7 @@ for (final s in service.library) {
             const Divider(color: AppTheme.borderColor),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.play_arrow_rounded,
+              leading: Icon(Icons.play_arrow_rounded,
                   color: AppTheme.accentGreen),
               title: const Text('Play',
                   style: TextStyle(color: AppTheme.textSecondary)),
@@ -1149,7 +1202,7 @@ for (final s in service.library) {
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('OK',
+                        child: Text('OK',
                             style: TextStyle(color: AppTheme.accentGreen)),
                       ),
                     ],
@@ -1194,7 +1247,7 @@ for (final s in service.library) {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'ADD TO PLAYLIST',
                   style: TextStyle(
                     color: AppTheme.accentGreen,
@@ -1206,9 +1259,9 @@ for (final s in service.library) {
                 const SizedBox(height: 12),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.add_rounded,
+                  leading: Icon(Icons.add_rounded,
                       color: AppTheme.accentGreen),
-                  title: const Text('New playlist',
+                  title: Text('New playlist',
                       style: TextStyle(
                           color: AppTheme.accentGreen,
                           fontWeight: FontWeight.w600)),
@@ -1243,7 +1296,7 @@ for (final s in service.library) {
                           TextButton(
                             onPressed: () =>
                                 Navigator.pop(ctx, controller.text.trim()),
-                            child: const Text('Create',
+                            child: Text('Create',
                                 style: TextStyle(
                                     color: AppTheme.accentGreen,
                                     fontWeight: FontWeight.w700)),
@@ -1267,7 +1320,7 @@ for (final s in service.library) {
                             style: const TextStyle(
                                 color: AppTheme.textSecondary)),
                         trailing: playlist.songIds.contains(song.id)
-                            ? const Icon(Icons.check_rounded,
+                            ? Icon(Icons.check_rounded,
                                 color: AppTheme.accentGreen, size: 18)
                             : null,
                         onTap: () {
