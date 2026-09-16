@@ -53,6 +53,15 @@ class PlayerService extends ChangeNotifier {
   // FIX: generation counter to cancel stale poll loops on skip/new song
   int _playGeneration = 0;
 
+  // FIX: true from the moment a song transition starts (stop old source /
+  // dispose it) until the new source is loaded and playing. The visualizer
+  // ticker runs continuously and calls into SoLoud's native FFI on every
+  // frame; if it queries audio data while a source is mid-dispose/mid-load,
+  // it can hit freed native memory and hard-crash the process (not a
+  // catchable Dart exception). Gating fftData/waveData on this flag closes
+  // that window instead of racing the native engine.
+  bool _isTransitioning = false;
+
   AudioData? _audioData;
 
   List<Song> get library => _library;
@@ -75,6 +84,7 @@ class PlayerService extends ChangeNotifier {
           : 0.0;
 
   Float32List get fftData {
+    if (_isTransitioning) return Float32List(256);
     // just_audio (used for AAC/M4A) doesn't feed SoLoud's analyzer, so
     // _audioData would just show a frozen leftover frame — return silence.
     if (_usingJustAudio) return Float32List(256);
@@ -92,6 +102,7 @@ class PlayerService extends ChangeNotifier {
   // FIX: waveform uses FFT data mapped to [-1, 1] so the wave painter
   // sees proper positive/negative swing instead of flat/broken output
   Float32List get waveData {
+    if (_isTransitioning) return Float32List(256);
     if (_usingJustAudio) return Float32List(256);
     if (_audioData == null) return Float32List(256);
     try {
@@ -428,6 +439,7 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> playSong(Song song, {List<Song>? queue}) async {
+    _isTransitioning = true;
     _queue = queue ?? _library;
     _currentIndex = _queue.indexWhere((s) => s.id == song.id);
     if (_currentIndex == -1) {
@@ -457,6 +469,7 @@ class PlayerService extends ChangeNotifier {
       // Previously it was set after _pollPosition(), so the while loop
       // would see _isPlaying == false and exit immediately on first play.
       _isPlaying = true;
+      _isTransitioning = false;
       notifyListeners();
 
       // Each play gets a unique generation; stale loops check and bail.
@@ -465,6 +478,7 @@ class PlayerService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Play error: $e');
       _isPlaying = false;
+      _isTransitioning = false;
       notifyListeners();
     }
   }
@@ -478,6 +492,7 @@ class PlayerService extends ChangeNotifier {
       await player.setVolume(_volume);
 
       _isPlaying = true;
+      _isTransitioning = false;
       notifyListeners();
 
       final generation = ++_playGeneration;
@@ -508,6 +523,7 @@ class PlayerService extends ChangeNotifier {
     } catch (e) {
       debugPrint('just_audio play error: $e');
       _isPlaying = false;
+      _isTransitioning = false;
       notifyListeners();
     }
   }

@@ -39,6 +39,13 @@ Future<void> main() async {
   // instead of blaring out of the device speaker unannounced.
   final session = await AudioSession.instance;
   await session.configure(const AudioSessionConfiguration.music());
+  // FIX: configure() alone only sets the session's category — it never
+  // requests audio focus. Without an active session, Android doesn't
+  // reliably attribute this app as the current audio-focus holder, so the
+  // "becoming noisy" broadcast (Bluetooth/headphone disconnect) was only
+  // delivered some of the time depending on device/OS. Activating the
+  // session for the app's lifetime makes it consistent.
+  await session.setActive(true);
 
   runApp(SoundVaultApp(audioHandler: _audioHandler, audioSession: session));
 }
