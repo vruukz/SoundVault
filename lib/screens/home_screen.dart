@@ -13,6 +13,7 @@ import 'player_screen.dart';
 import 'artist_screen.dart';
 import 'album_screen.dart';
 import 'playlist_screen.dart';
+import 'genre_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -414,10 +415,10 @@ class _HomeScreenState extends State<HomeScreen> {
             final dx = d.globalPosition.dx - _dragStartX;
             if (dx < -60) {
               // swipe left = next tab
-              setState(() => _tab = (_tab + 1).clamp(0, 3));
+              setState(() => _tab = (_tab + 1).clamp(0, 4));
             } else if (dx > 60) {
               // swipe right = prev tab
-              setState(() => _tab = (_tab - 1).clamp(0, 3));
+              setState(() => _tab = (_tab - 1).clamp(0, 4));
             }
           },
           child: Scaffold(
@@ -433,6 +434,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (_tab == 1) _buildAlbumGrid(service),
                       if (_tab == 2) _buildArtistList(service),
                       if (_tab == 3) _buildPlaylistList(service),
+                      if (_tab == 4) _buildGenreList(service),
                       const SliverToBoxAdapter(child: SizedBox(height: 100)),
                     ],
                   ),
@@ -579,6 +581,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {
                           _exitSelectionMode();
                           setState(() => _tab = 3);
+                        }),
+                    const SizedBox(width: 8),
+                    _Tab(
+                        label: 'GENRES',
+                        selected: _tab == 4,
+                        onTap: () {
+                          _exitSelectionMode();
+                          setState(() => _tab = 4);
                         }),
                   ],
                 ),
@@ -936,6 +946,96 @@ for (final s in service.library) {
             );
           },
           childCount: artistList.length,
+        ),
+      ),
+    );
+  }
+
+  // ── Genres tab ────────────────────────────────────────────────────────
+
+  Widget _buildGenreList(PlayerService service) {
+    final genres = <String, List<Song>>{};
+    for (final s in service.library) {
+      genres.putIfAbsent(s.genre, () => []).add(s);
+    }
+    final genreList = genres.entries.toList()
+      ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
+
+    if (genreList.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Text('No genres found',
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            final entry = genreList[i];
+            final color = _itemColor(entry.key);
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GestureDetector(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => GenreScreen(
+                      genre: entry.key,
+                      songs: entry.value,
+                    ),
+                  ));
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.cardColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: color.withValues(alpha: 0.3)),
+                        ),
+                        child: Center(
+                          child: Icon(Icons.library_music_rounded,
+                              color: color, size: 18),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(entry.key,
+                                style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14)),
+                            Text('${entry.value.length} songs',
+                                style: const TextStyle(
+                                    color: AppTheme.textMuted,
+                                    fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textMuted),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+          childCount: genreList.length,
         ),
       ),
     );

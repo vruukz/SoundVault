@@ -3,6 +3,7 @@ class Song {
   final String title;
   final String artist;
   final String album;
+  final String genre;
   final String filePath;
   final int duration; // milliseconds
   final String? albumArtPath;
@@ -12,6 +13,7 @@ class Song {
     required this.title,
     required this.artist,
     required this.album,
+    this.genre = 'Unknown Genre',
     required this.filePath,
     required this.duration,
     this.albumArtPath,
@@ -29,6 +31,7 @@ class Song {
     'title': title,
     'artist': artist,
     'album': album,
+    'genre': genre,
     'filePath': filePath,
     'duration': duration,
     'albumArtPath': albumArtPath,
@@ -39,6 +42,7 @@ class Song {
     title: j['title'],
     artist: j['artist'],
     album: j['album'],
+    genre: j['genre'] ?? 'Unknown Genre',
     filePath: j['filePath'],
     duration: j['duration'],
     albumArtPath: j['albumArtPath'],

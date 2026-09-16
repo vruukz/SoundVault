@@ -233,6 +233,7 @@ class PlayerService extends ChangeNotifier {
       'title': p.basenameWithoutExtension(filePath),
       'artist': 'Unknown Artist',
       'album': 'Unknown Album',
+      'genre': 'Unknown Genre',
       'duration': 0,
       'coverPath': null,
     };
@@ -242,6 +243,7 @@ class PlayerService extends ChangeNotifier {
         if (tag.title != null && tag.title!.isNotEmpty) result['title'] = tag.title!;
         if (tag.trackArtist != null && tag.trackArtist!.isNotEmpty) result['artist'] = tag.trackArtist!;
         if (tag.album != null && tag.album!.isNotEmpty) result['album'] = tag.album!;
+        if (tag.genre != null && tag.genre!.isNotEmpty) result['genre'] = tag.genre!;
         result['duration'] = (tag.duration ?? 0) * 1000;
         if (tag.pictures.isNotEmpty) {
           final pic = tag.pictures.first;
@@ -299,6 +301,7 @@ class PlayerService extends ChangeNotifier {
       title: meta['title'],
       artist: meta['artist'],
       album: meta['album'],
+      genre: meta['genre'],
       filePath: song.filePath,
       duration: meta['duration'],
       albumArtPath: coverPath,
