@@ -381,6 +381,165 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showArtistMenu(BuildContext context, PlayerService service,
+      String artist, List<Song> songs) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: AppTheme.borderColor),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(artist,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16)),
+              Text('${songs.length} song${songs.length != 1 ? 's' : ''}',
+                  style: const TextStyle(
+                      color: AppTheme.textMuted, fontSize: 13)),
+              const SizedBox(height: 16),
+              const Divider(color: AppTheme.borderColor),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.library_music_rounded,
+                    color: AppTheme.accentGreen),
+                title: const Text('Add to genre',
+                    style: TextStyle(color: AppTheme.textSecondary)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAddToGenreSheet(context, songs, service);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.delete_outline_rounded,
+                    color: Color(0xFFF87171)),
+                title: const Text('Delete artist',
+                    style: TextStyle(color: Color(0xFFF87171))),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteArtist(context, service, artist, songs);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddToGenreSheet(
+      BuildContext context, List<Song> songs, PlayerService service) {
+    final songIds = songs.map((s) => s.id).toList();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: AppTheme.borderColor),
+      ),
+      builder: (_) {
+        final genres = [...service.customGenres]
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'ADD TO GENRE',
+                  style: TextStyle(
+                    color: AppTheme.accentGreen,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.add_rounded, color: AppTheme.accentGreen),
+                  title: Text('New genre',
+                      style: TextStyle(
+                          color: AppTheme.accentGreen,
+                          fontWeight: FontWeight.w600)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final controller = TextEditingController();
+                    final name = await showDialog<String>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: AppTheme.cardColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: AppTheme.borderColor),
+                        ),
+                        title: const Text('New genre',
+                            style: TextStyle(color: AppTheme.textPrimary)),
+                        content: TextField(
+                          controller: controller,
+                          autofocus: true,
+                          style: const TextStyle(color: AppTheme.textPrimary),
+                          decoration: const InputDecoration(
+                            hintText: 'Genre name',
+                            hintStyle: TextStyle(color: AppTheme.textMuted),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel',
+                                style: TextStyle(color: AppTheme.textMuted)),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                Navigator.pop(ctx, controller.text.trim()),
+                            child: Text('Create',
+                                style: TextStyle(
+                                    color: AppTheme.accentGreen,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (name != null && name.isNotEmpty) {
+                      await service.assignSongsToGenre(songIds, name);
+                    }
+                  },
+                ),
+                if (genres.isNotEmpty) ...[
+                  const Divider(color: AppTheme.borderColor),
+                  ...genres.map((genre) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.library_music_rounded,
+                            color: AppTheme.textSecondary),
+                        title: Text(genre,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary)),
+                        onTap: () {
+                          service.assignSongsToGenre(songIds, genre);
+                          Navigator.pop(context);
+                        },
+                      )),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _confirmDeleteSelected(BuildContext context, PlayerService service) {
     final count = _selectedIds.length;
     _confirmDelete(
@@ -865,7 +1024,7 @@ for (final s in service.library) {
   ));
 },
                 onLongPress: () =>
-                    _confirmDeleteArtist(context, service, entry.key, entry.value),
+                    _showArtistMenu(context, service, entry.key, entry.value),
                 child: Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -953,29 +1112,106 @@ for (final s in service.library) {
 
   // ── Genres tab ────────────────────────────────────────────────────────
 
+  void _createGenre(BuildContext context, PlayerService service) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: AppTheme.borderColor),
+        ),
+        title: const Text('New genre',
+            style: TextStyle(color: AppTheme.textPrimary)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: const TextStyle(color: AppTheme.textPrimary),
+          decoration: const InputDecoration(
+            hintText: 'Genre name',
+            hintStyle: TextStyle(color: AppTheme.textMuted),
+          ),
+          onSubmitted: (v) {
+            final name = v.trim();
+            if (name.isNotEmpty) {
+              service.createGenre(name);
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppTheme.textMuted)),
+          ),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                service.createGenre(name);
+              }
+              Navigator.pop(ctx);
+            },
+            child: Text('Create',
+                style: TextStyle(
+                    color: AppTheme.accentGreen, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildGenreList(PlayerService service) {
     final genres = <String, List<Song>>{};
+    // Seed with manually-created genres (even empty ones) so they always
+    // show up as sections/options, not just once a song lands in them.
+    for (final g in service.customGenres) {
+      genres.putIfAbsent(g, () => []);
+    }
     for (final s in service.library) {
       genres.putIfAbsent(s.genre, () => []).add(s);
     }
     final genreList = genres.entries.toList()
       ..sort((a, b) => a.key.toLowerCase().compareTo(b.key.toLowerCase()));
 
-    if (genreList.isEmpty) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Text('No genres found',
-              style: const TextStyle(color: AppTheme.textMuted, fontSize: 13)),
-        ),
-      );
-    }
-
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       sliver: SliverList(
         delegate: SliverChildBuilderDelegate(
           (context, i) {
-            final entry = genreList[i];
+            if (i == 0) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GestureDetector(
+                  onTap: () => _createGenre(context, service),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cardColor,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppTheme.accentGreen.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_rounded,
+                            color: AppTheme.accentGreen, size: 18),
+                        const SizedBox(width: 10),
+                        Text('New genre',
+                            style: TextStyle(
+                                color: AppTheme.accentGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+            final entry = genreList[i - 1];
             final color = _itemColor(entry.key);
             return Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1035,7 +1271,7 @@ for (final s in service.library) {
               ),
             );
           },
-          childCount: genreList.length,
+          childCount: genreList.length + 1,
         ),
       ),
     );

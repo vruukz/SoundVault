@@ -85,7 +85,9 @@ class GenreScreen extends StatelessWidget {
                           textAlign: TextAlign.center,
                         ),
                         Text(
-                          '${songs.length} song${songs.length != 1 ? 's' : ''}',
+                          songs.isEmpty
+                              ? 'No songs yet'
+                              : '${songs.length} song${songs.length != 1 ? 's' : ''}',
                           style: const TextStyle(
                               color: AppTheme.textMuted, fontSize: 12),
                         ),
@@ -100,6 +102,7 @@ class GenreScreen extends StatelessWidget {
               ),
 
               // Play all button
+              if (songs.isNotEmpty)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

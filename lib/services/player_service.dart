@@ -20,6 +20,7 @@ class PlayerService extends ChangeNotifier {
   static const _libraryKey = 'soundvault_library';
   static const _watchedFolderKey = 'soundvault_watched_folder';
   static const _playlistsKey = 'soundvault_playlists';
+  static const _customGenresKey = 'soundvault_custom_genres';
 
   final SoLoud _soloud = SoLoud.instance;
   SoundHandle? _handle;
@@ -38,6 +39,7 @@ class PlayerService extends ChangeNotifier {
 
   List<Song> _library = [];
   List<Playlist> _playlists = [];
+  List<String> _customGenres = [];
   List<Song> _queue = [];
   Song? _currentSong;
   int _currentIndex = -1;
@@ -66,6 +68,7 @@ class PlayerService extends ChangeNotifier {
 
   List<Song> get library => _library;
   List<Playlist> get playlists => _playlists;
+  List<String> get customGenres => _customGenres;
   List<Song> get queue => _queue;
   Song? get currentSong => _currentSong;
   int get currentIndex => _currentIndex;
@@ -150,6 +153,7 @@ class PlayerService extends ChangeNotifier {
       _playlists = list.map((j) => Playlist.fromJson(j)).toList();
     }
     _watchedFolder = prefs.getString(_watchedFolderKey);
+    _customGenres = prefs.getStringList(_customGenresKey) ?? [];
     notifyListeners();
   }
 
@@ -359,6 +363,50 @@ class PlayerService extends ChangeNotifier {
     }
     final insertAt = (_currentIndex + 1).clamp(0, _queue.length);
     _queue.insert(insertAt, song);
+    notifyListeners();
+  }
+
+  // ── Genres ────────────────────────────────────────────────────────
+
+  Future<void> _saveCustomGenres() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_customGenresKey, _customGenres);
+  }
+
+  Future<void> createGenre(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    if (_customGenres.any((g) => g.toLowerCase() == trimmed.toLowerCase())) {
+      return;
+    }
+    _customGenres.add(trimmed);
+    await _saveCustomGenres();
+    notifyListeners();
+  }
+
+  Future<void> deleteGenre(String name) async {
+    _customGenres.removeWhere((g) => g.toLowerCase() == name.toLowerCase());
+    await _saveCustomGenres();
+    notifyListeners();
+  }
+
+  // Reassigns the given songs' genre tag (in-app only — doesn't touch the
+  // file on disk) and remembers the genre name even if none of the songs
+  // stick around, so it keeps showing up as an option/empty section.
+  Future<void> assignSongsToGenre(Iterable<String> songIds, String genre) async {
+    final trimmed = genre.trim();
+    if (trimmed.isEmpty) return;
+    final idSet = songIds.toSet();
+    for (var i = 0; i < _library.length; i++) {
+      if (idSet.contains(_library[i].id)) {
+        _library[i] = _library[i].copyWith(genre: trimmed);
+      }
+    }
+    if (!_customGenres.any((g) => g.toLowerCase() == trimmed.toLowerCase())) {
+      _customGenres.add(trimmed);
+      await _saveCustomGenres();
+    }
+    await _saveLibrary();
     notifyListeners();
   }
 

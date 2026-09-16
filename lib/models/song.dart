@@ -19,6 +19,17 @@ class Song {
     this.albumArtPath,
   });
 
+  Song copyWith({String? genre}) => Song(
+    id: id,
+    title: title,
+    artist: artist,
+    album: album,
+    genre: genre ?? this.genre,
+    filePath: filePath,
+    duration: duration,
+    albumArtPath: albumArtPath,
+  );
+
   String get durationFormatted {
     final total = Duration(milliseconds: duration);
     final m = total.inMinutes.remainder(60).toString().padLeft(2, '0');
